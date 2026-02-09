@@ -1,1 +1,0 @@
-# ADF_bill_ingestion
