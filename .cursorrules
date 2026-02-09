@@ -1,0 +1,172 @@
+# ADF Carrier Billing Integration - Cursor Rules
+
+## System Overview
+You are working on a carrier billing integration system for Azure Data Factory (ADF).
+The system transforms carrier-specific billing CSV files into a unified analytical schema.
+
+## Two-Agent Delegation System
+
+### 🔧 Setup Agent (Folder & File Collection)
+**Trigger:** User says "integrate [Carrier]" or "add [Carrier]"
+
+**Instructions:** Read and follow `.agents/setup_agent.md`
+
+**Responsibilities:**
+1. Create `[carrier]_transform/` folder with 5 empty files
+2. Request CSV and stored procedure from user
+3. STOP and wait - do NOT generate scripts
+4. Hand off to Design Agent when files are provided
+
+**Output:**
+```
+[carrier]_transform/
+  ├── [carrier]_example_bill.csv           (user fills)
+  ├── reference_stored_procedure.sql       (user fills)
+  ├── Insert_ELT_&_CB.sql                  (empty)
+  ├── Sync_Reference_Data.sql              (empty)
+  └── Insert_Unified_tables.sql            (empty)
+```
+
+---
+
+### 🎨 Design Agent (Script Generation)
+**Trigger:** User provides CSV and stored procedure files, or says "generate scripts"
+
+**Instructions:** Read and follow `.agents/design_agent.md`
+
+**MUST READ BEFORE GENERATING:**
+- `DESIGN_CONSTRAINTS.md` (10 rules you MUST apply)
+- `[carrier]_example_bill.csv` (to understand structure)
+- `reference_stored_procedure.sql` (to preserve business logic)
+
+**Responsibilities:**
+1. Generate delta table schema (1:1 with CSV)
+2. Generate `Insert_ELT_&_CB.sql` (with transaction)
+3. Generate `Sync_Reference_Data.sql` (no transaction)
+4. Generate `Insert_Unified_tables.sql` (with unit conversions)
+5. Provide 1 validation test query
+
+**Output:** 3 transform scripts + 1 test query
+
+---
+
+## Critical Rules
+
+### ❌ NEVER DO THIS
+- Modify `parent_pipeline/Load_to_gold.sql`
+- Modify `parent_pipeline/LookupCarrierInfo.sql`
+- Create README or extra documentation in carrier folder
+- Generate scripts before receiving CSV and stored procedure
+- Use `TRY_CAST` (use `CAST` for fail-fast)
+- Store cost in `shipment_attributes` table
+- Skip unit conversions (weight must be OZ, dimensions must be IN)
+- Forget `carrier_id` in NOT EXISTS checks
+
+### ✅ ALWAYS DO THIS
+- Read `DESIGN_CONSTRAINTS.md` before generating any scripts
+- Apply all 10 design constraints
+- Use transactions ONLY for `Insert_ELT_&_CB.sql`
+- Convert weight to OZ (LB × 16, KG × 35.274)
+- Convert dimensions to IN (CM ÷ 2.54, MM ÷ 25.4)
+- Include `carrier_id` in all NOT EXISTS checks
+- Make scripts idempotent
+- Return structured output (Status, counts, errors)
+
+---
+
+## Design Constraints Quick Reference
+
+1. **Parent Pipeline:** Never modify - it's carrier-agnostic
+2. **Transactions:** Only for `Insert_ELT_&_CB.sql` (invoice + line items)
+3. **Type Conversion:** Direct CAST (fail fast on bad data)
+4. **Idempotency:** NOT EXISTS with carrier_id
+5. **Business Key:** (carrier_id, tracking_number) - enforced by UNIQUE INDEX
+6. **Cost Calculation:** View calculates on-the-fly (NOT stored in table)
+7. **Unit Conversions:** Weight → OZ, Dimensions → IN (REQUIRED)
+8. **Script Returns:** Status, counts, error details
+9. **Format Support:** Narrow (one row per charge) OR Wide (unpivot view)
+10. **Execution Order:** ELT → Sync → Unified → Load_to_gold
+
+---
+
+## Reference Files
+
+**Read for context:**
+- `architecture.md` - System architecture and pipeline flow
+- `schema.sql` - Database schema
+- `fedex_transform/` - Complete working example (reference only, don't copy blindly)
+
+**Must read for generation:**
+- `DESIGN_CONSTRAINTS.md` - 10 rules to apply
+- `.agents/setup_agent.md` - Setup phase instructions
+- `.agents/design_agent.md` - Design phase instructions
+
+---
+
+## Example Workflow
+
+```
+User: "I want to integrate UPS"
+  ↓
+You: [Follow .agents/setup_agent.md]
+  - Create ups_transform/ with 5 empty files
+  - Ask for CSV and stored procedure
+  - STOP and wait
+
+User: [Provides CSV and stored procedure]
+  ↓
+You: [Follow .agents/design_agent.md]
+  - Read DESIGN_CONSTRAINTS.md
+  - Read user files
+  - Generate delta table + 3 scripts
+  - Provide validation test
+
+User: "Looks good, deploy"
+  ↓
+Done!
+```
+
+---
+
+## Validation
+
+After generating scripts, provide this ONE test query:
+
+```sql
+-- Test: File total vs charges total
+WITH file_total AS (
+    SELECT SUM([total_column]) AS expected
+    FROM delta_[carrier]_bill
+),
+charges_total AS (
+    SELECT SUM(amount) AS actual
+    FROM shipment_charges sc
+    JOIN shipment_attributes sa ON sa.id = sc.shipment_attribute_id
+    WHERE sa.carrier_id = @Carrier_id
+)
+SELECT 
+    expected, actual, ABS(expected - actual) AS difference,
+    CASE WHEN ABS(expected - actual) < 0.01 THEN '✅ PASS' ELSE '❌ FAIL' END AS result
+FROM file_total, charges_total;
+```
+
+---
+
+## Key Principles
+
+- **Separation:** Setup collects, Design generates
+- **Hard Stops:** Don't proceed without prerequisites
+- **Constraints:** Apply DESIGN_CONSTRAINTS.md religiously
+- **Reference:** Use fedex_transform/ as example, not template
+- **Simplicity:** 3 scripts + 1 test, nothing more
+
+---
+
+## When in Doubt
+
+1. Is it parent_pipeline? → Don't touch
+2. Missing prerequisites? → Ask user, don't assume
+3. Unsure about rule? → Read DESIGN_CONSTRAINTS.md
+4. Need example? → Look at fedex_transform/
+5. Complex logic? → Preserve from reference_stored_procedure.sql
+

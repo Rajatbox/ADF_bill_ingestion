@@ -1,0 +1,68 @@
+CREATE VIEW Test.vw_FedExCharges
+AS
+SELECT
+    fb.carrier_bill_id,
+    fb.invoice_number,
+    fb.express_or_ground_tracking_id,
+    fb.created_date,
+    v.charge_type,
+    v.charge_amount
+FROM Test.fedex_bill fb
+OUTER APPLY (
+    VALUES
+        ('Transportation Charge', fb.[Transportation Charge Amount]),
+        (fb.[Tracking ID Charge Description], fb.[Tracking ID Charge Amount]),
+        (fb.[Tracking ID Charge Description_1], fb.[Tracking ID Charge Amount_1]),
+        (fb.[Tracking ID Charge Description_2], fb.[Tracking ID Charge Amount_2]),
+        (fb.[Tracking ID Charge Description_3], fb.[Tracking ID Charge Amount_3]),
+        (fb.[Tracking ID Charge Description_4], fb.[Tracking ID Charge Amount_4]),
+        (fb.[Tracking ID Charge Description_5], fb.[Tracking ID Charge Amount_5]),
+        (fb.[Tracking ID Charge Description_6], fb.[Tracking ID Charge Amount_6]),
+        (fb.[Tracking ID Charge Description_7], fb.[Tracking ID Charge Amount_7]),
+        (fb.[Tracking ID Charge Description_8], fb.[Tracking ID Charge Amount_8]),
+        (fb.[Tracking ID Charge Description_9], fb.[Tracking ID Charge Amount_9]),
+        (fb.[Tracking ID Charge Description_10], fb.[Tracking ID Charge Amount_10]),
+        (fb.[Tracking ID Charge Description_11], fb.[Tracking ID Charge Amount_11]),
+        (fb.[Tracking ID Charge Description_12], fb.[Tracking ID Charge Amount_12]),
+        (fb.[Tracking ID Charge Description_13], fb.[Tracking ID Charge Amount_13]),
+        (fb.[Tracking ID Charge Description_14], fb.[Tracking ID Charge Amount_14]),
+        (fb.[Tracking ID Charge Description_15], fb.[Tracking ID Charge Amount_15]),
+        (fb.[Tracking ID Charge Description_16], fb.[Tracking ID Charge Amount_16]),
+        (fb.[Tracking ID Charge Description_17], fb.[Tracking ID Charge Amount_17]),
+        (fb.[Tracking ID Charge Description_18], fb.[Tracking ID Charge Amount_18]),
+        (fb.[Tracking ID Charge Description_19], fb.[Tracking ID Charge Amount_19]),
+        (fb.[Tracking ID Charge Description_20], fb.[Tracking ID Charge Amount_20]),
+        (fb.[Tracking ID Charge Description_21], fb.[Tracking ID Charge Amount_21]),
+        (fb.[Tracking ID Charge Description_22], fb.[Tracking ID Charge Amount_22]),
+        (fb.[Tracking ID Charge Description_23], fb.[Tracking ID Charge Amount_23]),
+        (fb.[Tracking ID Charge Description_24], fb.[Tracking ID Charge Amount_24]),
+        (fb.[Tracking ID Charge Description_25], fb.[Tracking ID Charge Amount_25]),
+        (fb.[Tracking ID Charge Description_26], fb.[Tracking ID Charge Amount_26]),
+        (fb.[Tracking ID Charge Description_27], fb.[Tracking ID Charge Amount_27]),
+        (fb.[Tracking ID Charge Description_28], fb.[Tracking ID Charge Amount_28]),
+        (fb.[Tracking ID Charge Description_29], fb.[Tracking ID Charge Amount_29]),
+        (fb.[Tracking ID Charge Description_30], fb.[Tracking ID Charge Amount_30]),
+        (fb.[Tracking ID Charge Description_31], fb.[Tracking ID Charge Amount_31]),
+        (fb.[Tracking ID Charge Description_32], fb.[Tracking ID Charge Amount_32]),
+        (fb.[Tracking ID Charge Description_33], fb.[Tracking ID Charge Amount_33]),
+        (fb.[Tracking ID Charge Description_34], fb.[Tracking ID Charge Amount_34]),
+        (fb.[Tracking ID Charge Description_35], fb.[Tracking ID Charge Amount_35]),
+        (fb.[Tracking ID Charge Description_36], fb.[Tracking ID Charge Amount_36]),
+        (fb.[Tracking ID Charge Description_37], fb.[Tracking ID Charge Amount_37]),
+        (fb.[Tracking ID Charge Description_38], fb.[Tracking ID Charge Amount_38]),
+        (fb.[Tracking ID Charge Description_39], fb.[Tracking ID Charge Amount_39]),
+        (fb.[Tracking ID Charge Description_40], fb.[Tracking ID Charge Amount_40]),
+        (fb.[Tracking ID Charge Description_41], fb.[Tracking ID Charge Amount_41]),
+        (fb.[Tracking ID Charge Description_42], fb.[Tracking ID Charge Amount_42]),
+        (fb.[Tracking ID Charge Description_43], fb.[Tracking ID Charge Amount_43]),
+        (fb.[Tracking ID Charge Description_44], fb.[Tracking ID Charge Amount_44]),
+        (fb.[Tracking ID Charge Description_45], fb.[Tracking ID Charge Amount_45]),
+        (fb.[Tracking ID Charge Description_46], fb.[Tracking ID Charge Amount_46]),
+        (fb.[Tracking ID Charge Description_47], fb.[Tracking ID Charge Amount_47]),
+        (fb.[Tracking ID Charge Description_48], fb.[Tracking ID Charge Amount_48]),
+        (fb.[Tracking ID Charge Description_49], fb.[Tracking ID Charge Amount_49]),
+        (fb.[Tracking ID Charge Description_50], fb.[Tracking ID Charge Amount_50])
+) v (charge_type, charge_amount)
+WHERE NULLIF(v.charge_type, '') IS NOT NULL
+  AND v.charge_amount IS NOT NULL
+  AND v.charge_amount <> 0;
