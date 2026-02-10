@@ -7,7 +7,13 @@ Note: Database name is omitted - will be parameterized via ADF Linked Service
 ================================================================================
 */
 
-CREATE TABLE test.delta_fedex_bill (
+/*
+================================================================================
+Delta Tables
+================================================================================
+*/
+
+CREATE TABLE test.delta_fedex_bill ( -- rename to delta_fedex_bill
 	[Consolidated Account Number] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Bill to Account Number] int NULL,
 	[Invoice Date] int NULL,
@@ -221,10 +227,15 @@ CREATE TABLE test.delta_fedex_bill (
 );
 
 
------------------------------------------------------------------------------------------------------------------
+/*
+================================================================================
+Normalized Carrier Tables
+================================================================================
+*/
 
+--FEDEX BILL TABLE
 
-CREATE TABLE Test.fedex_bill (
+CREATE TABLE test.fedex_bill (
 	id int IDENTITY(1,1) NOT NULL,
 	invoice_number nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	invoice_date date NOT NULL,
@@ -364,9 +375,53 @@ ON Test.fedex_bill (created_date);
 CREATE NONCLUSTERED INDEX IX_fedex_bill_tracking_number_invoice
 ON Test.fedex_bill (express_or_ground_tracking_id, invoice_number, invoice_date);
 
------------------------------------------------------------------------------------------------------------------
+--UPS BILL TABLE
 
-CREATE TABLE Test.carrier_bill (
+CREATE TABLE test.ups_bill (
+	id int IDENTITY(1,1) NOT NULL,
+	invoice_number nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	invoice_date date NOT NULL,
+	charge_description nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	charge_classification_code nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	charge_category_code nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	charge_category_detail_code nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	transaction_date datetime2 NULL,
+	tracking_number nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[zone] nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	net_amount decimal(18,2) NOT NULL,
+	billed_weight decimal(18,2) NULL,
+	billed_weight_unit nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	dim_length decimal(18,2) NULL,
+	dim_width decimal(18,2) NULL,
+	dim_height decimal(18,2) NULL,
+	dim_unit nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
+	carrier_bill_id int NULL,
+	sender_postal nvarchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	
+	CONSTRAINT PK_ups_carrier_bill_id PRIMARY KEY (id),
+	CONSTRAINT FK_ups_bill_carrier_bill FOREIGN KEY (carrier_bill_id) 
+		REFERENCES Test.carrier_bill(carrier_bill_id)
+);
+
+-- Index for FK lookup performance (join with carrier_bill)
+CREATE NONCLUSTERED INDEX IX_ups_bill_carrier_bill_id
+ON test.ups_bill (carrier_bill_id);
+
+-- Index for incremental processing (used by Insert_Unified_tables.sql)
+CREATE NONCLUSTERED INDEX IX_ups_bill_created_date
+ON test.ups_bill (created_date);
+
+-- Composite index for tracking number lookups (used in mapping queries)
+CREATE NONCLUSTERED INDEX IX_ups_bill_tracking_number_invoice
+ON test.ups_bill (tracking_number, invoice_number, invoice_date);
+
+/*
+================================================================================
+GOLD LAYER TABLES
+================================================================================
+*/
+CREATE TABLE Test.carrier_bill ( -- rename to carrier_bill
 	carrier_bill_id int IDENTITY(1,1) NOT NULL,
 	bill_id int NULL,
 	carrier_id int NULL,

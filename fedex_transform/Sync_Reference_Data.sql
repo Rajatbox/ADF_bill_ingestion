@@ -8,6 +8,8 @@ ADF Pipeline Variables Required:
   INPUT:
     - @Carrier_id: INT - Carrier identifier from LookupCarrierInfo activity
                          Used to associate new charge types with correct carrier
+    - @lastrun: DATETIME2 - Last successful run timestamp for incremental processing
+                            Filters created_date to process only new/updated records
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'

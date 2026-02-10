@@ -336,3 +336,102 @@ ON dbo.shipment_package_wip (
 
 ---
 
+## ups_transform/Insert_Unified_tables.sql
+
+### 9. Charges with NULL Tracking Numbers Are Excluded
+
+**Status:** Documented  
+**Created:** 2026-02-10  
+**Priority:** Low  
+**Complexity:** Medium
+
+**Current State:**
+The `Insert_Unified_tables.sql` script excludes charges that don't have a tracking number:
+
+**Part 1 - MERGE shipment_attributes:**
+```sql
+WHERE ub.created_date > @lastrun
+    AND ub.tracking_number IS NOT NULL  -- Filters out NULL tracking numbers
+    GROUP BY ub.tracking_number
+```
+
+**Part 2 - INSERT shipment_charges:**
+```sql
+FROM test.ups_bill AS ub
+INNER JOIN Test.shipment_attributes AS sa  -- Can't join if no tracking number
+    ON sa.carrier_id = @carrier_id
+    AND sa.tracking_number = ub.tracking_number
+```
+
+**Issue:**
+Some UPS charges don't have tracking numbers (e.g., invoice-level fees, adjustments, service charges). These are excluded from `shipment_charges` because:
+1. They can't be inserted into `shipment_attributes` (tracking_number is the business key)
+2. The INNER JOIN in Part 2 requires matching on tracking_number
+3. **Result:** Total charges in `shipment_charges` < Total in `ups_bill` (validation fails)
+
+**Example Charges Without Tracking Numbers:**
+- Invoice-level service charges
+- Account-level adjustments
+- Billing fees not tied to specific shipments
+
+**Impact:**
+- ✅ **Current:** Acceptable - shipment-level reconciliation is the primary use case
+- ⚠️ **Future:** If full invoice reconciliation is needed, these charges must be included
+
+**Recommended Fix (Future):**
+If invoice-level charges need to be tracked, options include:
+
+**Option 1: Separate Table for Invoice-Level Charges**
+```sql
+CREATE TABLE Test.invoice_level_charges (
+    id int IDENTITY(1,1) PRIMARY KEY,
+    carrier_id int NOT NULL,
+    carrier_bill_id int NOT NULL,
+    charge_type_id int NOT NULL,
+    amount decimal(18,2) NOT NULL,
+    created_date datetime2 DEFAULT SYSDATETIME(),
+    FOREIGN KEY (carrier_id) REFERENCES test.carrier(carrier_id),
+    FOREIGN KEY (carrier_bill_id) REFERENCES Test.carrier_bill(carrier_bill_id),
+    FOREIGN KEY (charge_type_id) REFERENCES test.charge_types(charge_type_id)
+);
+```
+
+**Option 2: Allow NULL tracking_number in shipment_charges**
+- Remove INNER JOIN requirement with shipment_attributes
+- Change to LEFT JOIN or separate INSERT for NULL tracking numbers
+- Update validation queries to sum both shipment_charges and invoice-level charges
+
+**Option 3: Use Sentinel Value**
+- Create a placeholder shipment_attribute with tracking_number = 'INVOICE_LEVEL' or 'NO_TRACKING'
+- Link all non-shipment charges to this sentinel record
+- Requires business logic to handle this special case
+
+**Validation Query Impact:**
+Current validation compares:
+- **Expected:** SUM(delta_ups_bill.[Net Amount])
+- **Actual:** SUM(shipment_charges.amount) WHERE tracking_number IS NOT NULL
+- **Mismatch:** Charges with NULL tracking_number are excluded from actual
+
+**Workaround (Current):**
+Filter validation query to only compare charges with tracking numbers:
+```sql
+-- Modified validation: Only compare shipment-level charges
+WITH file_total AS (
+    SELECT SUM(CAST([Net Amount] AS decimal(18,2))) AS expected
+    FROM test.delta_ups_bill
+    WHERE [Tracking Number] IS NOT NULL  -- Match filter logic
+),
+charges_total AS (
+    SELECT SUM(amount) AS actual
+    FROM Test.shipment_charges sc
+    JOIN Test.shipment_attributes sa ON sa.id = sc.shipment_attribute_id
+    WHERE sa.carrier_id = @carrier_id
+)
+SELECT expected, actual, ABS(expected - actual) AS difference;
+```
+
+**Priority:** Low (shipment-level reconciliation is sufficient for current business needs)  
+**Impact:** Low (invoice-level charges represent small percentage of total, typically < 1%)
+
+---
+

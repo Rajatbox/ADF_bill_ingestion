@@ -93,14 +93,58 @@ SELECT
     'SUCCESS' AS Status,
     @Count AS RecordsInserted;
 
--- Error
-SELECT 
-    'ERROR' AS Status,
-    ERROR_NUMBER() AS ErrorNumber,
-    ERROR_MESSAGE() AS ErrorMessage;
+-- Error (with descriptive THROW)
+BEGIN CATCH
+    IF @@TRANCOUNT > 0
+        ROLLBACK TRANSACTION;
+    
+    DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+    DECLARE @ErrorLine INT = ERROR_LINE();
+    DECLARE @ErrorNumber INT = ERROR_NUMBER();
+    
+    DECLARE @DetailedError NVARCHAR(4000) = 
+        '[Carrier] [ScriptName].sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) + 
+        ' (Error ' + CAST(@ErrorNumber AS NVARCHAR(10)) + '): ' + @ErrorMessage;
+    
+    SELECT 
+        'ERROR' AS Status,
+        @ErrorNumber AS ErrorNumber,
+        @DetailedError AS ErrorMessage,
+        @ErrorLine AS ErrorLine;
+    
+    -- Re-throw with descriptive message
+    THROW 50000, @DetailedError, 1;
+END CATCH
 ```
 
-## 9. Narrow vs Wide Format
+## 9. Carrier Bill Line Items - Use carrier_bill_id Join Only
+```sql
+-- ✅ CORRECT: Use carrier_bill_id only in NOT EXISTS
+INSERT INTO [carrier]_bill (...)
+SELECT ...
+FROM delta_[carrier]_bill d
+INNER JOIN carrier_bill cb
+    ON cb.bill_number = d.[Invoice Number]
+    AND cb.bill_date = d.[Invoice Date]
+    AND cb.carrier_id = @Carrier_id  -- Always include carrier_id in join
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM [carrier]_bill t
+    WHERE t.carrier_bill_id = cb.carrier_bill_id  -- Single field check
+);
+
+-- ❌ WRONG: Don't redundantly check invoice_number AND invoice_date in NOT EXISTS
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM [carrier]_bill t
+    WHERE t.invoice_number = d.[Invoice Number]
+      AND t.invoice_date = d.[Invoice Date]
+      AND t.carrier_bill_id = cb.carrier_bill_id
+);
+```
+**Why**: carrier_bill_id uniquely identifies the invoice. Once an invoice is processed (carrier_bill_id exists in line items table), skip all lines. This is cleaner and prevents duplicate inserts more reliably.
+
+## 10. Narrow vs Wide Format
 
 ### Narrow Format (one row per charge)
 ```sql
@@ -118,7 +162,56 @@ FROM [carrier]_bill
 UNPIVOT (...) AS unpvt;
 ```
 
-## 10. Execution Order
+## 11. Charge Category Mapping (CRITICAL)
+
+**NEVER** invent charge category names or IDs. Only use the explicit mappings below:
+
+### Known Categories (with IDs):
+- **Adjustment** → `charge_category_id = 16`
+- **Other** → `charge_category_id = 11`
+
+### Pattern (Carrier-Specific Field-Based):
+
+**FedEx** (uses charge_description text matching):
+```sql
+CASE 
+    WHEN LOWER(charge_description) LIKE '%adjustment%' THEN 'Adjustment'
+    ELSE 'Other'
+END AS category,
+
+CASE 
+    WHEN LOWER(charge_description) LIKE '%adjustment%' THEN 16
+    ELSE 11
+END AS charge_category_id
+```
+
+**UPS** (uses charge_category_code field):
+```sql
+CASE 
+    WHEN charge_category_code = 'ADJ' THEN 'Adjustment'
+    ELSE 'Other'
+END AS category,
+
+CASE 
+    WHEN charge_category_code = 'ADJ' THEN 16
+    ELSE 11
+END AS charge_category_id
+```
+
+```sql
+-- ❌ WRONG: Don't invent categories
+CASE 
+    WHEN classification_code = 'FSC' THEN 'Fuel'       -- Unknown category_id!
+    WHEN classification_code = 'ACC' THEN 'Accessorial'  -- Unknown category_id!
+    ELSE 'Other'
+END
+```
+
+**Why**: We don't maintain a full category mapping table. Only Adjustment (16) and Other (11) are defined.
+
+**Freight Flag**: Use carrier-specific field (e.g., UPS: `charge_category_code = 'SHP'`, FedEx: service type)
+
+## 12. Execution Order
 1. LookupCarrierInfo.sql (get carrier_id, lastrun)
 2. Insert_ELT_&_CB.sql (transactional)
 3. Sync_Reference_Data.sql (idempotent)

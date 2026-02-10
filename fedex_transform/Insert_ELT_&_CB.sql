@@ -102,7 +102,7 @@ test.delta_fedex_bill AS d
     Inserts individual shipment/line items from delta_fedex_bill into fedex_bill.
     Each row represents a single shipment with tracking details, charges, and dimensions.
     Joins directly with carrier_bill table to get carrier_bill_id for referential integrity.
-    NOT EXISTS check includes carrier_bill_id for batch-specific duplicate detection.
+    NOT EXISTS check uses carrier_bill_id only for cleaner idempotency check.
     ================================================================================
     */
 
@@ -351,14 +351,13 @@ FROM test.delta_fedex_bill d
 INNER JOIN Test.carrier_bill cb
     ON cb.bill_number = CAST(d.[Invoice Number] AS nvarchar(50))
     AND cb.bill_date = CAST(NULLIF(TRIM(CAST(d.[Invoice Date] AS varchar)), '') AS date)
+    AND cb.carrier_id = @Carrier_id
 WHERE d.[Invoice Number] IS NOT NULL
   AND NULLIF(TRIM(CAST(d.[Invoice Date] AS varchar)), '') IS NOT NULL
   AND NOT EXISTS (
       SELECT 1 
       FROM Test.fedex_bill t
-      WHERE t.invoice_number = CAST(d.[Invoice Number] AS nvarchar(50))
-        AND t.invoice_date = CAST(NULLIF(TRIM(CAST(d.[Invoice Date] AS varchar)), '') AS date)
-        AND t.carrier_bill_id = cb.carrier_bill_id
+      WHERE t.carrier_bill_id = cb.carrier_bill_id
   );
 
     SET @LineItemsInserted = @@ROWCOUNT;
@@ -377,13 +376,22 @@ BEGIN CATCH
     IF @@TRANCOUNT > 0
         ROLLBACK TRANSACTION;
     
+    -- Build descriptive error message
+    DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+    DECLARE @ErrorLine INT = ERROR_LINE();
+    DECLARE @ErrorNumber INT = ERROR_NUMBER();
+    
+    DECLARE @DetailedError NVARCHAR(4000) = 
+        'FedEx Insert_ELT_&_CB.sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) + 
+        ' (Error ' + CAST(@ErrorNumber AS NVARCHAR(10)) + '): ' + @ErrorMessage;
+    
     -- Return error details
     SELECT 
         'ERROR' AS Status,
-        ERROR_NUMBER() AS ErrorNumber,
-        ERROR_MESSAGE() AS ErrorMessage,
-        ERROR_LINE() AS ErrorLine;
+        @ErrorNumber AS ErrorNumber,
+        @DetailedError AS ErrorMessage,
+        @ErrorLine AS ErrorLine;
     
-    -- Re-throw error for ADF to handle
-    THROW;
+    -- Re-throw with descriptive message
+    THROW 50000, @DetailedError, 1;
 END CATCH;
