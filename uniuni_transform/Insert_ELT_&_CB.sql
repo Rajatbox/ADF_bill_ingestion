@@ -1,0 +1,232 @@
+/*
+================================================================================
+Insert Script: ELT & Carrier Bill (CB) - Transactional
+================================================================================
+Note: Database name is parameterized via ADF Linked Service per environment.
+
+ADF Pipeline Variables Required:
+  INPUT:
+    - @Carrier_id: INT - UniUni carrier ID (from LookupCarrierInfo.sql)
+  
+  OUTPUT (Query Results):
+    - Status: 'SUCCESS' or 'ERROR'
+    - InvoicesInserted: INT - Number of carrier_bill records inserted
+    - LineItemsInserted: INT - Number of uniuni_bill line items inserted
+    - ErrorNumber: INT (if error)
+    - ErrorMessage: NVARCHAR (if error)
+
+Purpose: Two-step transactional data insertion process:
+         1. Aggregate and insert invoice-level summary data from delta_uniuni_bill 
+            into carrier_bill (Carrier Bill summary) - generates carrier_bill_id
+         2. Insert line-level billing data from delta_uniuni_bill (ELT staging) 
+            into uniuni_bill (Carrier Bill line items)
+
+Source:   test.delta_uniuni_bill
+Targets:  Test.carrier_bill (invoice summaries)
+          Test.uniuni_bill (line items)
+
+Validation: Fails if invoice_time or tracking_number is NULL or empty (fail-fast)
+Match:      invoice_number AND invoice_time AND carrier_id (INSERT WHERE NOT EXISTS)
+Transaction: Both inserts wrapped in transaction for atomicity - all succeed or all fail
+
+Execution Order: SECOND in pipeline (after LookupCarrierInfo.sql)
+================================================================================
+*/
+
+SET NOCOUNT ON;
+SET XACT_ABORT ON;  -- Automatically rollback on error
+
+DECLARE @InvoicesInserted INT = 0;
+DECLARE @LineItemsInserted INT = 0;
+
+BEGIN TRANSACTION;
+
+BEGIN TRY
+    /*
+    ================================================================================
+    Step 1: Insert Invoice-Level Summary Data
+    ================================================================================
+    Aggregates line items by invoice_number and invoice_time to create invoice-level
+    summaries in carrier_bill. Calculates total_amount (sum of all charges) and
+    num_shipments (count of tracking numbers) per invoice.
+    Generates carrier_bill_id values which will be joined in downstream processes.
+    ================================================================================
+    */
+
+    INSERT INTO Test.carrier_bill (
+        carrier_id,
+        bill_number,
+        bill_date,
+        total_amount,
+        num_shipments
+    )
+    SELECT
+        @Carrier_id AS carrier_id,
+        CAST(d.[Invoice Number] AS VARCHAR(100)) AS bill_number,
+        CAST(d.[Invoice Time] AS DATE) AS bill_date,
+        SUM(
+            CAST(ISNULL(d.[Base Fee], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Discount Fee], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Discount Percentage], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Signature Fee], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Pickup Fee], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Over Dimension Fee], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Over Max Size Fee], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Over-weight Fee], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Fuel Surcharge], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Peak Season Surcharge], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Delivery Area Surcharge], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Delivery Area Surcharge Extend], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Truck Fee], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Relabel Fee], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Miscellaneous Fee], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Credit Card Surcharge], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Credit], 0) AS DECIMAL(18,2)) +
+            CAST(ISNULL(d.[Approved Claim], 0) AS DECIMAL(18,2))
+        ) AS total_amount,
+        COUNT(d.[Tracking Number]) AS num_shipments
+    FROM
+        test.delta_uniuni_bill AS d
+    GROUP BY
+        d.[Invoice Number], 
+        CAST(d.[Invoice Time] AS DATE)
+    HAVING
+        NOT EXISTS (
+            SELECT 1
+            FROM Test.carrier_bill AS cb
+            WHERE cb.bill_number = CAST(d.[Invoice Number] AS VARCHAR(100))
+                AND cb.bill_date = CAST(d.[Invoice Time] AS DATE)
+                AND cb.carrier_id = @Carrier_id
+        );
+
+    SET @InvoicesInserted = @@ROWCOUNT;
+
+    /*
+    ================================================================================
+    Step 2: Insert Line-Level Billing Data
+    ================================================================================
+    Inserts individual shipment line items from delta_uniuni_bill into uniuni_bill.
+    Each row represents one tracking number with all its associated charges and
+    dimensional data. Uses fail-fast CAST for data validation.
+    ================================================================================
+    */
+
+    INSERT INTO Test.uniuni_bill (
+        invoice_time,
+        invoice_number,
+        tracking_number,
+        carrier_bill_id,
+        total_billed_amount,
+        billable_weight,
+        billable_weight_uom,
+        scaled_weight,
+        scaled_weight_uom,
+        dim_weight,
+        dim_weight_uom,
+        [zone],
+        induction_facility_zipcode,
+        dim_length,
+        dim_width,
+        dim_height,
+        package_dim_uom,
+        service_type,
+        shipment_date,
+        induction_time,
+        base_fee,
+        discount_fee,
+        discount_percentage,
+        signature_fee,
+        pickup_fee,
+        over_dimension_fee,
+        over_max_size_fee,
+        over_weight_fee,
+        fuel_surcharge,
+        peak_season_surcharge,
+        delivery_area_surcharge,
+        delivery_area_surcharge_extend,
+        truck_fee,
+        relabel_fee,
+        miscellaneous_fee,
+        credit_card_surcharge,
+        credit,
+        approved_claim
+    )
+    SELECT
+        CAST(d.[Invoice Time] AS DATE) AS invoice_time,
+        CAST(d.[Invoice Number] AS BIGINT) AS invoice_number,
+        CAST(d.[Tracking Number] AS NVARCHAR(50)) AS tracking_number,
+        cb.carrier_bill_id,
+        CAST(d.[Total Billed Amount] AS DECIMAL(18,2)) AS total_billed_amount,
+        CAST(d.[Billable Weight] AS DECIMAL(18,4)) AS billable_weight,
+        CAST(d.[Billable Weight UOM] AS NVARCHAR(10)) AS billable_weight_uom,
+        CAST(d.[Scaled Weight] AS DECIMAL(18,4)) AS scaled_weight,
+        CAST(d.[Scaled Weight UOM] AS NVARCHAR(10)) AS scaled_weight_uom,
+        CAST(d.[Dim Weight] AS DECIMAL(18,4)) AS dim_weight,
+        CAST(d.[Dim Weight UOM] AS NVARCHAR(10)) AS dim_weight_uom,
+        CAST(d.[Zone] AS INT) AS [zone],
+        CAST(d.[Induction Facility ZipCode] AS INT) AS induction_facility_zipcode,
+        CAST(d.[Package Length] AS DECIMAL(18,4)) AS dim_length,
+        CAST(d.[Package Width] AS DECIMAL(18,4)) AS dim_width,
+        CAST(d.[Package Height] AS DECIMAL(18,4)) AS dim_height,
+        CAST(d.[Package DIM UOM] AS NVARCHAR(10)) AS package_dim_uom,
+        CAST(d.[Service Type] AS NVARCHAR(255)) AS service_type,
+        CAST(d.[Shipped Time] AS DATE) AS shipment_date,
+        CAST(d.[Induction Time] AS DATE) AS induction_time,
+        CAST(d.[Base Fee] AS DECIMAL(10,2)) AS base_fee,
+        CAST(ISNULL(d.[Discount Fee], 0) AS DECIMAL(10,2)) AS discount_fee,
+        CAST(ISNULL(d.[Discount Percentage], 0) AS DECIMAL(10,2)) AS discount_percentage,
+        CAST(ISNULL(d.[Signature Fee], 0) AS DECIMAL(10,2)) AS signature_fee,
+        CAST(ISNULL(d.[Pickup Fee], 0) AS DECIMAL(10,2)) AS pickup_fee,
+        CAST(ISNULL(d.[Over Dimension Fee], 0) AS DECIMAL(10,2)) AS over_dimension_fee,
+        CAST(ISNULL(d.[Over Max Size Fee], 0) AS DECIMAL(10,2)) AS over_max_size_fee,
+        CAST(ISNULL(d.[Over-weight Fee], 0) AS DECIMAL(10,2)) AS over_weight_fee,
+        CAST(ISNULL(d.[Fuel Surcharge], 0) AS DECIMAL(10,2)) AS fuel_surcharge,
+        CAST(ISNULL(d.[Peak Season Surcharge], 0) AS DECIMAL(10,2)) AS peak_season_surcharge,
+        CAST(ISNULL(d.[Delivery Area Surcharge], 0) AS DECIMAL(10,2)) AS delivery_area_surcharge,
+        CAST(ISNULL(d.[Delivery Area Surcharge Extend], 0) AS DECIMAL(10,2)) AS delivery_area_surcharge_extend,
+        CAST(ISNULL(d.[Truck Fee], 0) AS DECIMAL(10,2)) AS truck_fee,
+        CAST(ISNULL(d.[Relabel Fee], 0) AS DECIMAL(10,2)) AS relabel_fee,
+        CAST(ISNULL(d.[Miscellaneous Fee], 0) AS DECIMAL(10,2)) AS miscellaneous_fee,
+        CAST(ISNULL(d.[Credit Card Surcharge], 0) AS DECIMAL(10,2)) AS credit_card_surcharge,
+        CAST(ISNULL(d.[Credit], 0) AS DECIMAL(10,2)) AS credit,
+        CAST(ISNULL(d.[Approved Claim], 0) AS DECIMAL(10,2)) AS approved_claim
+    FROM
+        test.delta_uniuni_bill AS d
+    INNER JOIN Test.carrier_bill AS cb
+        ON cb.bill_number = CAST(d.[Invoice Number] AS VARCHAR(100))
+        AND cb.bill_date = CAST(d.[Invoice Time] AS DATE)
+        AND cb.carrier_id = @Carrier_id
+    WHERE
+        NOT EXISTS (
+            SELECT 1
+            FROM Test.uniuni_bill AS ub
+            WHERE ub.tracking_number = CAST(d.[Tracking Number] AS NVARCHAR(50))
+                AND ub.invoice_number = CAST(d.[Invoice Number] AS BIGINT)
+                AND ub.invoice_time = CAST(d.[Invoice Time] AS DATE)
+                AND ub.carrier_bill_id = cb.carrier_bill_id
+        );
+
+    SET @LineItemsInserted = @@ROWCOUNT;
+
+    COMMIT TRANSACTION;
+
+    -- Return success results
+    SELECT 
+        'SUCCESS' AS Status,
+        @InvoicesInserted AS InvoicesInserted,
+        @LineItemsInserted AS LineItemsInserted;
+
+END TRY
+BEGIN CATCH
+    -- Rollback on error
+    IF @@TRANCOUNT > 0
+        ROLLBACK TRANSACTION;
+
+    -- Return error details
+    SELECT 
+        'ERROR' AS Status,
+        ERROR_NUMBER() AS ErrorNumber,
+        ERROR_MESSAGE() AS ErrorMessage,
+        ERROR_LINE() AS ErrorLine;
+
+END CATCH;

@@ -365,6 +365,68 @@ CREATE NONCLUSTERED INDEX IX_fedex_bill_tracking_number_invoice
 ON Test.fedex_bill (express_or_ground_tracking_id, invoice_number, invoice_date);
 
 -----------------------------------------------------------------------------------------------------------------
+--UNIUNI SCHEMAS 
+
+
+CREATE TABLE Test.uniuni_bill (
+	id int IDENTITY(1,1) NOT NULL,
+	invoice_time date NOT NULL,
+	invoice_number bigint NOT NULL,
+	tracking_number nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	total_billed_amount decimal(18,2) NOT NULL,
+	billable_weight decimal(18,4) NOT NULL,
+	billable_weight_uom nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	scaled_weight decimal(18,4) NOT NULL,
+	scaled_weight_uom nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	dim_weight decimal(18,4) NOT NULL,
+	dim_weight_uom nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[zone] int NOT NULL,
+	induction_facility_zipcode int NOT NULL,
+	dim_length decimal(18,4) NOT NULL,
+	dim_width decimal(18,4) NOT NULL,
+	dim_height decimal(18,4) NOT NULL,
+	package_dim_uom nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	service_type nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	shipment_date date NULL,
+	induction_time date NOT NULL,
+	base_fee decimal(10,2) NOT NULL,
+	discount_fee decimal(10,2) NULL,
+	discount_percentage decimal(10,2) NULL,
+	signature_fee decimal(10,2) NULL,
+	pickup_fee decimal(10,2) NULL,
+	over_dimension_fee decimal(10,2) NULL,
+	over_max_size_fee decimal(10,2) NULL,
+	over_weight_fee decimal(10,2) NULL,
+	fuel_surcharge decimal(10,2) NULL,
+	peak_season_surcharge decimal(10,2) NULL,
+	delivery_area_surcharge decimal(10,2) NULL,
+	delivery_area_surcharge_extend decimal(10,2) NULL,
+	truck_fee decimal(10,2) NULL,
+	relabel_fee decimal(10,2) NULL,
+	miscellaneous_fee decimal(10,2) NULL,
+	credit_card_surcharge decimal(10,2) NULL,
+	credit decimal(10,2) NULL,
+	approved_claim decimal(10,2) NULL,
+	carrier_bill_id int NULL,
+	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
+
+	CONSTRAINT PK_uniuni_carrier_bill_id PRIMARY KEY (id),
+	CONSTRAINT FK_uniuni_bill_carrier_bill FOREIGN KEY (carrier_bill_id) 
+		REFERENCES Test.carrier_bill(carrier_bill_id)
+);
+
+-- Index for FK lookup performance (join with carrier_bill)
+CREATE NONCLUSTERED INDEX IX_uniuni_bill_carrier_bill_id
+ON Test.uniuni_bill (carrier_bill_id);
+
+-- Index for incremental processing (used by Insert_Unified_tables.sql)
+CREATE NONCLUSTERED INDEX IX_uniuni_bill_created_date
+ON Test.uniuni_bill (created_date);
+
+-- Composite index for tracking number lookups (used in mapping queries)
+CREATE NONCLUSTERED INDEX IX_uniuni_bill_tracking_number_invoice
+ON Test.uniuni_bill (tracking_number, invoice_number, invoice_time);
+-----------------------------------------------------------------------------------------------------------------
 
 CREATE TABLE Test.carrier_bill (
 	carrier_bill_id int IDENTITY(1,1) NOT NULL,
