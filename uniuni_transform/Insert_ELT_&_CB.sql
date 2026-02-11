@@ -62,40 +62,40 @@ BEGIN TRY
     )
     SELECT
         @Carrier_id AS carrier_id,
-        CAST(d.[Invoice Number] AS VARCHAR(100)) AS bill_number,
-        CAST(d.[Invoice Time] AS DATE) AS bill_date,
+        CAST(TRIM(d.[Invoice Number]) AS VARCHAR(100)) AS bill_number,
+        CAST(TRIM(d.[Invoice Time]) AS DATE) AS bill_date,
         SUM(
-            CAST(ISNULL(d.[Base Fee], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Discount Fee], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Discount Percentage], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Signature Fee], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Pickup Fee], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Over Dimension Fee], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Over Max Size Fee], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Over-weight Fee], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Fuel Surcharge], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Peak Season Surcharge], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Delivery Area Surcharge], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Delivery Area Surcharge Extend], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Truck Fee], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Relabel Fee], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Miscellaneous Fee], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Credit Card Surcharge], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Credit], 0) AS DECIMAL(18,2)) +
-            CAST(ISNULL(d.[Approved Claim], 0) AS DECIMAL(18,2))
+            CAST(ISNULL(NULLIF(TRIM(d.[Base Fee]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Discount Fee]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Discount Percentage]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Signature Fee]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Pickup Fee]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Over Dimension Fee]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Over Max Size Fee]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Over-weight Fee]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Fuel Surcharge]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Peak Season Surcharge]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Delivery Area Surcharge]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Delivery Area Surcharge Extend]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Truck Fee]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Relabel Fee]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Miscellaneous Fee]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Credit Card Surcharge]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Credit]), ''), '0') AS DECIMAL(18,2)) +
+            CAST(ISNULL(NULLIF(TRIM(d.[Approved Claim]), ''), '0') AS DECIMAL(18,2))
         ) AS total_amount,
         COUNT(d.[Tracking Number]) AS num_shipments
     FROM
         test.delta_uniuni_bill AS d
     GROUP BY
         d.[Invoice Number], 
-        CAST(d.[Invoice Time] AS DATE)
+        CAST(TRIM(d.[Invoice Time]) AS DATE)
     HAVING
         NOT EXISTS (
             SELECT 1
             FROM Test.carrier_bill AS cb
-            WHERE cb.bill_number = CAST(d.[Invoice Number] AS VARCHAR(100))
-                AND cb.bill_date = CAST(d.[Invoice Time] AS DATE)
+            WHERE cb.bill_number = CAST(TRIM(d.[Invoice Number]) AS VARCHAR(100))
+                AND cb.bill_date = CAST(TRIM(d.[Invoice Time]) AS DATE)
                 AND cb.carrier_id = @Carrier_id
         );
 
@@ -152,57 +152,57 @@ BEGIN TRY
         approved_claim
     )
     SELECT
-        CAST(d.[Invoice Time] AS DATE) AS invoice_time,
-        CAST(d.[Invoice Number] AS BIGINT) AS invoice_number,
-        CAST(d.[Tracking Number] AS NVARCHAR(50)) AS tracking_number,
+        CAST(TRIM(d.[Invoice Time]) AS DATE) AS invoice_time,
+        CAST(TRIM(d.[Invoice Number]) AS BIGINT) AS invoice_number,
+        CAST(TRIM(d.[Tracking Number]) AS NVARCHAR(50)) AS tracking_number,
         cb.carrier_bill_id,
-        CAST(d.[Total Billed Amount] AS DECIMAL(18,2)) AS total_billed_amount,
-        CAST(d.[Billable Weight] AS DECIMAL(18,4)) AS billable_weight,
-        CAST(d.[Billable Weight UOM] AS NVARCHAR(10)) AS billable_weight_uom,
-        CAST(d.[Scaled Weight] AS DECIMAL(18,4)) AS scaled_weight,
-        CAST(d.[Scaled Weight UOM] AS NVARCHAR(10)) AS scaled_weight_uom,
-        CAST(d.[Dim Weight] AS DECIMAL(18,4)) AS dim_weight,
-        CAST(d.[Dim Weight UOM] AS NVARCHAR(10)) AS dim_weight_uom,
-        CAST(d.[Zone] AS INT) AS [zone],
-        CAST(d.[Induction Facility ZipCode] AS INT) AS induction_facility_zipcode,
-        CAST(d.[Package Length] AS DECIMAL(18,4)) AS dim_length,
-        CAST(d.[Package Width] AS DECIMAL(18,4)) AS dim_width,
-        CAST(d.[Package Height] AS DECIMAL(18,4)) AS dim_height,
-        CAST(d.[Package DIM UOM] AS NVARCHAR(10)) AS package_dim_uom,
-        CAST(d.[Service Type] AS NVARCHAR(255)) AS service_type,
-        CAST(d.[Shipped Time] AS DATE) AS shipment_date,
-        CAST(d.[Induction Time] AS DATE) AS induction_time,
-        CAST(d.[Base Fee] AS DECIMAL(10,2)) AS base_fee,
-        CAST(ISNULL(d.[Discount Fee], 0) AS DECIMAL(10,2)) AS discount_fee,
-        CAST(ISNULL(d.[Discount Percentage], 0) AS DECIMAL(10,2)) AS discount_percentage,
-        CAST(ISNULL(d.[Signature Fee], 0) AS DECIMAL(10,2)) AS signature_fee,
-        CAST(ISNULL(d.[Pickup Fee], 0) AS DECIMAL(10,2)) AS pickup_fee,
-        CAST(ISNULL(d.[Over Dimension Fee], 0) AS DECIMAL(10,2)) AS over_dimension_fee,
-        CAST(ISNULL(d.[Over Max Size Fee], 0) AS DECIMAL(10,2)) AS over_max_size_fee,
-        CAST(ISNULL(d.[Over-weight Fee], 0) AS DECIMAL(10,2)) AS over_weight_fee,
-        CAST(ISNULL(d.[Fuel Surcharge], 0) AS DECIMAL(10,2)) AS fuel_surcharge,
-        CAST(ISNULL(d.[Peak Season Surcharge], 0) AS DECIMAL(10,2)) AS peak_season_surcharge,
-        CAST(ISNULL(d.[Delivery Area Surcharge], 0) AS DECIMAL(10,2)) AS delivery_area_surcharge,
-        CAST(ISNULL(d.[Delivery Area Surcharge Extend], 0) AS DECIMAL(10,2)) AS delivery_area_surcharge_extend,
-        CAST(ISNULL(d.[Truck Fee], 0) AS DECIMAL(10,2)) AS truck_fee,
-        CAST(ISNULL(d.[Relabel Fee], 0) AS DECIMAL(10,2)) AS relabel_fee,
-        CAST(ISNULL(d.[Miscellaneous Fee], 0) AS DECIMAL(10,2)) AS miscellaneous_fee,
-        CAST(ISNULL(d.[Credit Card Surcharge], 0) AS DECIMAL(10,2)) AS credit_card_surcharge,
-        CAST(ISNULL(d.[Credit], 0) AS DECIMAL(10,2)) AS credit,
-        CAST(ISNULL(d.[Approved Claim], 0) AS DECIMAL(10,2)) AS approved_claim
+        CAST(NULLIF(TRIM(d.[Total Billed Amount]), '') AS DECIMAL(18,2)) AS total_billed_amount,
+        CAST(NULLIF(TRIM(d.[Billable Weight]), '') AS DECIMAL(18,4)) AS billable_weight,
+        CAST(TRIM(d.[Billable Weight UOM]) AS NVARCHAR(10)) AS billable_weight_uom,
+        CAST(NULLIF(TRIM(d.[Scaled Weight]), '') AS DECIMAL(18,4)) AS scaled_weight,
+        CAST(TRIM(d.[Scaled Weight UOM]) AS NVARCHAR(10)) AS scaled_weight_uom,
+        CAST(NULLIF(TRIM(d.[Dim Weight]), '') AS DECIMAL(18,4)) AS dim_weight,
+        CAST(TRIM(d.[Dim Weight UOM]) AS NVARCHAR(10)) AS dim_weight_uom,
+        CAST(NULLIF(TRIM(d.[Zone]), '') AS INT) AS [zone],
+        CAST(NULLIF(TRIM(d.[Induction Facility ZipCode]), '') AS INT) AS induction_facility_zipcode,
+        CAST(NULLIF(TRIM(d.[Package Length]), '') AS DECIMAL(18,4)) AS dim_length,
+        CAST(NULLIF(TRIM(d.[Package Width]), '') AS DECIMAL(18,4)) AS dim_width,
+        CAST(NULLIF(TRIM(d.[Package Height]), '') AS DECIMAL(18,4)) AS dim_height,
+        CAST(TRIM(d.[Package DIM UOM]) AS NVARCHAR(10)) AS package_dim_uom,
+        CAST(TRIM(d.[Service Type]) AS NVARCHAR(255)) AS service_type,
+        CAST(NULLIF(TRIM(d.[Shipped Time]), '') AS DATE) AS shipment_date,
+        CAST(NULLIF(TRIM(d.[Induction Time]), '') AS DATE) AS induction_time,
+        CAST(ISNULL(NULLIF(TRIM(d.[Base Fee]), ''), '0') AS DECIMAL(10,2)) AS base_fee,
+        CAST(ISNULL(NULLIF(TRIM(d.[Discount Fee]), ''), '0') AS DECIMAL(10,2)) AS discount_fee,
+        CAST(ISNULL(NULLIF(TRIM(d.[Discount Percentage]), ''), '0') AS DECIMAL(10,2)) AS discount_percentage,
+        CAST(ISNULL(NULLIF(TRIM(d.[Signature Fee]), ''), '0') AS DECIMAL(10,2)) AS signature_fee,
+        CAST(ISNULL(NULLIF(TRIM(d.[Pickup Fee]), ''), '0') AS DECIMAL(10,2)) AS pickup_fee,
+        CAST(ISNULL(NULLIF(TRIM(d.[Over Dimension Fee]), ''), '0') AS DECIMAL(10,2)) AS over_dimension_fee,
+        CAST(ISNULL(NULLIF(TRIM(d.[Over Max Size Fee]), ''), '0') AS DECIMAL(10,2)) AS over_max_size_fee,
+        CAST(ISNULL(NULLIF(TRIM(d.[Over-weight Fee]), ''), '0') AS DECIMAL(10,2)) AS over_weight_fee,
+        CAST(ISNULL(NULLIF(TRIM(d.[Fuel Surcharge]), ''), '0') AS DECIMAL(10,2)) AS fuel_surcharge,
+        CAST(ISNULL(NULLIF(TRIM(d.[Peak Season Surcharge]), ''), '0') AS DECIMAL(10,2)) AS peak_season_surcharge,
+        CAST(ISNULL(NULLIF(TRIM(d.[Delivery Area Surcharge]), ''), '0') AS DECIMAL(10,2)) AS delivery_area_surcharge,
+        CAST(ISNULL(NULLIF(TRIM(d.[Delivery Area Surcharge Extend]), ''), '0') AS DECIMAL(10,2)) AS delivery_area_surcharge_extend,
+        CAST(ISNULL(NULLIF(TRIM(d.[Truck Fee]), ''), '0') AS DECIMAL(10,2)) AS truck_fee,
+        CAST(ISNULL(NULLIF(TRIM(d.[Relabel Fee]), ''), '0') AS DECIMAL(10,2)) AS relabel_fee,
+        CAST(ISNULL(NULLIF(TRIM(d.[Miscellaneous Fee]), ''), '0') AS DECIMAL(10,2)) AS miscellaneous_fee,
+        CAST(ISNULL(NULLIF(TRIM(d.[Credit Card Surcharge]), ''), '0') AS DECIMAL(10,2)) AS credit_card_surcharge,
+        CAST(ISNULL(NULLIF(TRIM(d.[Credit]), ''), '0') AS DECIMAL(10,2)) AS credit,
+        CAST(ISNULL(NULLIF(TRIM(d.[Approved Claim]), ''), '0') AS DECIMAL(10,2)) AS approved_claim
     FROM
         test.delta_uniuni_bill AS d
     INNER JOIN Test.carrier_bill AS cb
-        ON cb.bill_number = CAST(d.[Invoice Number] AS VARCHAR(100))
-        AND cb.bill_date = CAST(d.[Invoice Time] AS DATE)
+        ON cb.bill_number = CAST(TRIM(d.[Invoice Number]) AS VARCHAR(100))
+        AND cb.bill_date = CAST(TRIM(d.[Invoice Time]) AS DATE)
         AND cb.carrier_id = @Carrier_id
     WHERE
         NOT EXISTS (
             SELECT 1
             FROM Test.uniuni_bill AS ub
-            WHERE ub.tracking_number = CAST(d.[Tracking Number] AS NVARCHAR(50))
-                AND ub.invoice_number = CAST(d.[Invoice Number] AS BIGINT)
-                AND ub.invoice_time = CAST(d.[Invoice Time] AS DATE)
+            WHERE ub.tracking_number = CAST(TRIM(d.[Tracking Number]) AS NVARCHAR(50))
+                AND ub.invoice_number = CAST(TRIM(d.[Invoice Number]) AS BIGINT)
+                AND ub.invoice_time = CAST(TRIM(d.[Invoice Time]) AS DATE)
                 AND ub.carrier_bill_id = cb.carrier_bill_id
         );
 

@@ -79,30 +79,30 @@ BEGIN TRY
         
         -- Weight conversion to OZ (from billable_weight)
         CASE 
-            WHEN UPPER(ub.billable_weight_uom) = 'LBS' THEN ub.billable_weight * 16.0
-            WHEN UPPER(ub.billable_weight_uom) = 'OZS' THEN ub.billable_weight
+            WHEN UPPER(TRIM(ub.billable_weight_uom)) = 'LBS' THEN ub.billable_weight * 16.0
+            WHEN UPPER(TRIM(ub.billable_weight_uom)) = 'OZS' THEN ub.billable_weight
             WHEN ub.billable_weight_uom IS NULL THEN NULL
             ELSE NULL  -- Unknown unit
         END AS billed_weight_oz,
         
         -- Dimension conversions to IN
         CASE 
-            WHEN UPPER(ub.package_dim_uom) = 'CM' THEN ub.dim_length / 2.54
-            WHEN UPPER(ub.package_dim_uom) = 'IN' THEN ub.dim_length
+            WHEN UPPER(TRIM(ub.package_dim_uom)) = 'CM' THEN ub.dim_length / 2.54
+            WHEN UPPER(TRIM(ub.package_dim_uom)) = 'IN' THEN ub.dim_length
             WHEN ub.package_dim_uom IS NULL THEN NULL
             ELSE NULL  -- Unknown unit
         END AS billed_length_in,
         
         CASE 
-            WHEN UPPER(ub.package_dim_uom) = 'CM' THEN ub.dim_width / 2.54
-            WHEN UPPER(ub.package_dim_uom) = 'IN' THEN ub.dim_width
+            WHEN UPPER(TRIM(ub.package_dim_uom)) = 'CM' THEN ub.dim_width / 2.54
+            WHEN UPPER(TRIM(ub.package_dim_uom)) = 'IN' THEN ub.dim_width
             WHEN ub.package_dim_uom IS NULL THEN NULL
             ELSE NULL  -- Unknown unit
         END AS billed_width_in,
         
         CASE 
-            WHEN UPPER(ub.package_dim_uom) = 'CM' THEN ub.dim_height / 2.54
-            WHEN UPPER(ub.package_dim_uom) = 'IN' THEN ub.dim_height
+            WHEN UPPER(TRIM(ub.package_dim_uom)) = 'CM' THEN ub.dim_height / 2.54
+            WHEN UPPER(TRIM(ub.package_dim_uom)) = 'IN' THEN ub.dim_height
             WHEN ub.package_dim_uom IS NULL THEN NULL
             ELSE NULL  -- Unknown unit
         END AS billed_height_in
