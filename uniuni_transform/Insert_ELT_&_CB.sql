@@ -6,7 +6,7 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - UniUni carrier ID (from LookupCarrierInfo.sql)
+    - None (reads from delta_uniuni_bill staging table populated by ADF Copy activity)
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -16,17 +16,18 @@ ADF Pipeline Variables Required:
     - ErrorMessage: NVARCHAR (if error)
 
 Purpose: Two-step transactional data insertion process:
-         1. Aggregate and insert invoice-level summary data from delta_uniuni_bill 
+         1. Aggregate and insert invoice-level summary data from delta_uniuni_bill
             into carrier_bill (Carrier Bill summary) - generates carrier_bill_id
-         2. Insert line-level billing data from delta_uniuni_bill (ELT staging) 
-            into uniuni_bill (Carrier Bill line items)
+         2. Insert line-level billing data from delta_uniuni_bill (ELT staging)
+            into uniuni_bill (Carrier Bill line items) with carrier_bill_id foreign key
 
 Source:   test.delta_uniuni_bill
 Targets:  Test.carrier_bill (invoice summaries)
           Test.uniuni_bill (line items)
 
-Validation: Fails if invoice_time or tracking_number is NULL or empty (fail-fast)
-Match:      invoice_number AND invoice_time AND carrier_id (INSERT WHERE NOT EXISTS)
+Validation: Fails if invoice_time or tracking_number is NULL or empty (fail-fast CAST)
+Match:      Step 1: bill_number + bill_date + carrier_id (INSERT WHERE NOT EXISTS)
+            Step 2: carrier_bill_id only (INSERT WHERE NOT EXISTS) per Design Constraint #9
 Transaction: Both inserts wrapped in transaction for atomicity - all succeed or all fail
 
 Execution Order: SECOND in pipeline (after LookupCarrierInfo.sql)
@@ -36,8 +37,7 @@ Execution Order: SECOND in pipeline (after LookupCarrierInfo.sql)
 SET NOCOUNT ON;
 SET XACT_ABORT ON;  -- Automatically rollback on error
 
-DECLARE @InvoicesInserted INT = 0;
-DECLARE @LineItemsInserted INT = 0;
+DECLARE @InvoicesInserted INT, @LineItemsInserted INT;
 
 BEGIN TRANSACTION;
 
@@ -200,10 +200,7 @@ BEGIN TRY
         NOT EXISTS (
             SELECT 1
             FROM Test.uniuni_bill AS ub
-            WHERE ub.tracking_number = CAST(TRIM(d.[Tracking Number]) AS NVARCHAR(50))
-                AND ub.invoice_number = CAST(TRIM(d.[Invoice Number]) AS BIGINT)
-                AND ub.invoice_time = CAST(TRIM(d.[Invoice Time]) AS DATE)
-                AND ub.carrier_bill_id = cb.carrier_bill_id
+            WHERE ub.carrier_bill_id = cb.carrier_bill_id  -- Single field check per Design Constraint #9
         );
 
     SET @LineItemsInserted = @@ROWCOUNT;
@@ -222,11 +219,22 @@ BEGIN CATCH
     IF @@TRANCOUNT > 0
         ROLLBACK TRANSACTION;
 
+    -- Build descriptive error message
+    DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+    DECLARE @ErrorLine INT = ERROR_LINE();
+    DECLARE @ErrorNumber INT = ERROR_NUMBER();
+
+    DECLARE @DetailedError NVARCHAR(4000) =
+        'UniUni Insert_ELT_&_CB.sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) +
+        ' (Error ' + CAST(@ErrorNumber AS NVARCHAR(10)) + '): ' + @ErrorMessage;
+
     -- Return error details
     SELECT 
         'ERROR' AS Status,
-        ERROR_NUMBER() AS ErrorNumber,
-        ERROR_MESSAGE() AS ErrorMessage,
-        ERROR_LINE() AS ErrorLine;
+        @ErrorNumber AS ErrorNumber,
+        @DetailedError AS ErrorMessage,
+        @ErrorLine AS ErrorLine;
 
+    -- Re-throw with descriptive message
+    THROW 50000, @DetailedError, 1;
 END CATCH;
