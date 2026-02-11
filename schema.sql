@@ -226,6 +226,43 @@ CREATE TABLE test.delta_fedex_bill ( -- rename to delta_fedex_bill
 	[Shipment Notes] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 );
 
+-- USPS EASYPOST DELTA TABLE
+CREATE TABLE test.delta_usps_easypost_bill (
+	[created_at] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[id] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[tracking_code] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[status] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[from_city] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[from_state] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[from_zip] varchar(20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[to_name] varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[to_company] varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[to_phone] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[to_email] varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[to_street1] varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[to_street2] varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[to_city] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[to_state] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[to_zip] varchar(20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[to_country] varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[length] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[width] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[height] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[weight] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[predefined_package] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[postage_label_created_at] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[service] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[carrier] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[rate] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[refund_status] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[label_fee] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[postage_fee] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[insurance_fee] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[carbon_offset_fee] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[usps_zone] varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[carrier_account_id] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
+);
+
 
 /*
 ================================================================================
@@ -374,6 +411,30 @@ ON Test.fedex_bill (created_date);
 -- Composite index for tracking number lookups (used in mapping queries)
 CREATE NONCLUSTERED INDEX IX_fedex_bill_tracking_number_invoice
 ON Test.fedex_bill (express_or_ground_tracking_id, invoice_number, invoice_date);
+
+-- USPS EASYPOST BILL TABLE
+CREATE TABLE test.usps_easy_post_bill (
+	id bigint IDENTITY(1,1) NOT NULL,
+	tracking_code varchar(40) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	invoice_number varchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	carrier_bill_id int NULL,
+	weight decimal(18,2) NULL,
+	rate decimal(18,2) NULL,
+	label_fee decimal(18,2) NULL,
+	postage_fee decimal(18,2) NULL,
+	usps_zone tinyint NULL,
+	from_zip char(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[length] decimal(18,2) NULL,
+	width decimal(18,2) NULL,
+	height decimal(18,2) NULL,
+	postage_label_created_at datetime2(0) NULL,
+	insurance_fee decimal(18,2) NULL,
+	carbon_offset_fee decimal(18,2) NULL,
+	bill_date datetime2(0) NOT NULL,
+	service varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	created_at datetime2(0) DEFAULT sysdatetime() NOT NULL,
+	CONSTRAINT PK__usps_eas__3213E83F62CA7274 PRIMARY KEY (id)
+);
 
 --UPS BILL TABLE
 

@@ -56,6 +56,7 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 - Modify `parent_pipeline/Load_to_gold.sql`
 - Modify `parent_pipeline/LookupCarrierInfo.sql`
 - Create README or extra documentation in carrier folder
+- Create any new files unless explicitly mentioned in system prompt or user request
 - Generate scripts before receiving CSV and stored procedure
 - Use `TRY_CAST` (use `CAST` for fail-fast)
 - Store cost in `shipment_attributes` table
@@ -158,7 +159,8 @@ FROM file_total, charges_total;
 - **Hard Stops:** Don't proceed without prerequisites
 - **Constraints:** Apply DESIGN_CONSTRAINTS.md religiously
 - **Reference:** Use fedex_transform/ as example, not template
-- **Simplicity:** 3 scripts + 1 test, nothing more
+- **Simplicity:** 3 scripts + 1 test, nothing more (no extra files)
+- **No File Proliferation:** Don't create extra files, markdown docs, or helper scripts
 
 ---
 
