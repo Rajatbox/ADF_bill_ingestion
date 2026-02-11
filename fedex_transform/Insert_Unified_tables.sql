@@ -274,14 +274,23 @@ Test.shipment_attributes sa
 
 END TRY
 BEGIN CATCH
+    -- Build descriptive error message
+    DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+    DECLARE @ErrorLine INT = ERROR_LINE();
+    DECLARE @ErrorNumber INT = ERROR_NUMBER();
+    
+    DECLARE @DetailedError NVARCHAR(4000) = 
+        'FedEx Insert_Unified_tables.sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) + 
+        ' (Error ' + CAST(@ErrorNumber AS NVARCHAR(10)) + '): ' + @ErrorMessage;
+    
     -- Return error details for ADF to handle
     SELECT 
         'ERROR' AS Status,
-        ERROR_NUMBER() AS ErrorNumber,
-        ERROR_MESSAGE() AS ErrorMessage,
-        ERROR_LINE() AS ErrorLine;
+        @ErrorNumber AS ErrorNumber,
+        @DetailedError AS ErrorMessage,
+        @ErrorLine AS ErrorLine;
     
-    -- Re-throw error for ADF pipeline to catch
-    THROW;
+    -- Re-throw with descriptive message
+    THROW 50000, @DetailedError, 1;
 END CATCH;
 
