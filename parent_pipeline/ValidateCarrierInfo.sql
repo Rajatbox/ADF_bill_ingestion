@@ -33,8 +33,8 @@ SELECT
     COALESCE(cit.last_run_time, '2000-01-01') AS last_run_time,
     @InputCarrier AS validated_carrier_name -- Useful for the Switch later
 FROM
-    [falcon-gold-test].dbo.carrier c
+    dbo.carrier c
 LEFT JOIN 
-    [falcon-gold-test].Test.carrier_ingestion_tracker cit ON c.carrier_name = cit.carrier_name
+    billing.carrier_ingestion_tracker cit ON c.carrier_name = cit.carrier_name
 WHERE
     LOWER(c.carrier_name) = @InputCarrier;

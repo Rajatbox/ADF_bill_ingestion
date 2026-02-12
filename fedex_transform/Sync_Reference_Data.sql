@@ -94,28 +94,23 @@ Block 2: Synchronize Charge Types
 Discovers distinct charge types from vw_FedExCharges and inserts any new
 charge types into the charge_types table. Applies category logic:
 - If charge_type contains 'adjustment' (case insensitive):
-    category = 'Adjustment', charge_category_id = 16
+    charge_category_id = 16 (FK to dbo.charge_type_category)
 - Otherwise:
-    category = 'Other', charge_category_id = 11
+    charge_category_id = 11 (FK to dbo.charge_type_category)
 ================================================================================
 */
 
 INSERT INTO dbo.charge_types (
     carrier_id,
     charge_name,
-    category,
-    charge_category_id
+    charge_category_id  -- FK to dbo.charge_type_category.id
 )
 SELECT DISTINCT
     @Carrier_id AS carrier_id,
     CAST(v.charge_type AS varchar(255)) AS charge_name,
     CASE 
-        WHEN LOWER(v.charge_type) LIKE '%adjustment%' THEN 'Adjustment'
-        ELSE 'Other'
-    END AS category,
-    CASE 
-        WHEN LOWER(v.charge_type) LIKE '%adjustment%' THEN 16
-        ELSE 11
+        WHEN LOWER(v.charge_type) LIKE '%adjustment%' THEN 16  -- FK to charge_type_category
+        ELSE 11  -- FK to charge_type_category
     END AS charge_category_id
 FROM 
 billing.vw_FedExCharges v

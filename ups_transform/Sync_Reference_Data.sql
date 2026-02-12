@@ -85,8 +85,8 @@ BEGIN TRY
     ================================================================================
     Extracts ALL unique charge descriptions from ups_bill and applies category logic
     based on charge_category_code:
-    - charge_category_code = 'ADJ': category = 'Adjustment', charge_category_id = 16
-    - All others: category = 'Other', charge_category_id = 11
+    - charge_category_code = 'ADJ': charge_category_id = 16 (FK to dbo.charge_type_category)
+    - All others: charge_category_id = 11 (FK to dbo.charge_type_category)
     
     Freight flag determined by:
     - charge_category_code = 'SHP' -> freight = 1
@@ -102,8 +102,7 @@ BEGIN TRY
         freight,
         dt,
         markup,
-        category,
-        charge_category_id
+        charge_category_id  -- FK to dbo.charge_type_category.id
     )
     SELECT DISTINCT
         @carrier_id AS carrier_id,
@@ -115,12 +114,8 @@ BEGIN TRY
         0 AS dt,      -- Default: not a dimensional weight charge
         0 AS markup,  -- Default: not a markup
         CASE 
-            WHEN ub.charge_category_code = 'ADJ' THEN 'Adjustment'
-            ELSE 'Other'
-        END AS category,
-        CASE 
-            WHEN ub.charge_category_code = 'ADJ' THEN 16
-            ELSE 11
+            WHEN ub.charge_category_code = 'ADJ' THEN 16  -- FK to charge_type_category
+            ELSE 11  -- FK to charge_type_category
         END AS charge_category_id
     FROM
         billing.ups_bill AS ub

@@ -8,6 +8,7 @@ Note: Database name is parameterized via ADF Linked Service per environment
 ADF Pipeline Variables Required:
   INPUT:
     - @lastrun: DATETIME2 - Last run timestamp for incremental processing
+    - @carrier_id: INT - Carrier identifier (from ValidateCarrierInfo)
   
   OUTPUT:
     - Status: 'SUCCESS' or 'ERROR'
@@ -126,13 +127,15 @@ dbo.shipping_method AS sm
     WMS master data for matching status.
     
     Source: shipment_charges (itemized billing charges)
-    Enrichment: charge_types (category), carrier_bill (invoice info),
-                shipment_attributes (shipment_date), WMS tables (matching),
-                order table (customer_id)
+    Enrichment: charge_types (charge_category_id -> dbo.charge_type_category), 
+                carrier_bill (invoice info), shipment_attributes (shipment_date), 
+                WMS tables (matching), order table (customer_id)
     Match Logic: Links to WMS via shipment_package_id FK, then to order via order_id
     Incremental: Only insert new charges (created_date > @lastrun)
     Idempotent: NOT EXISTS check on (shipment_attribute_id, carrier_bill_id, charge_type_id)
                 Uses existing index on shipment_attribute_id for performance
+    
+    Note: INNER JOIN to charge_types ensures all charges have valid charge type definitions
     ================================================================================
     */
 
@@ -164,7 +167,7 @@ dbo.shipping_method AS sm
         o.[3pl_customer_id] AS customer_id,
         sc.carrier_id,
         spw.shipping_method_id,
-        COALESCE(ct.category, 'Other') AS category,
+        ctc.category AS category,  -- Category name from dbo.charge_type_category
         ct.charge_name AS cost_item,
         sc.amount,
         sc.charge_type_id,
@@ -190,9 +193,12 @@ billing.shipment_charges AS sc
     JOIN 
 billing.carrier_bill AS cb
         ON cb.carrier_bill_id = sc.carrier_bill_id
-    LEFT JOIN 
+    JOIN 
 dbo.charge_types AS ct
         ON ct.charge_type_id = sc.charge_type_id
+    JOIN
+dbo.charge_type_category AS ctc
+        ON ctc.id = ct.charge_category_id
     LEFT JOIN 
 billing.shipment_attributes AS sa
         ON sa.tracking_number = sc.tracking_number
@@ -217,6 +223,37 @@ dbo.[order] AS o
         );
 
     SET @LedgerInserted = @@ROWCOUNT;
+
+    /*
+    ================================================================================
+    Part 4: UPDATE carrier_ingestion_tracker (Timestamp Tracking)
+    ================================================================================
+    Update last_run_time for the carrier after successful completion.
+    This timestamp is used by the next run for incremental processing.
+    
+    Note: This assumes @carrier_id parameter is passed from parent pipeline.
+          If not available, this step can be moved to a separate script or
+          handled at the child pipeline level.
+    
+    Idempotent: MERGE operation - inserts if missing, updates if exists
+    ================================================================================
+    */
+    
+    MERGE INTO billing.carrier_ingestion_tracker AS target
+    USING (
+        SELECT 
+            c.carrier_name,
+            SYSDATETIME() AS last_run_time
+        FROM dbo.carrier c
+        WHERE c.carrier_id = @carrier_id
+    ) AS source
+    ON target.carrier_name = source.carrier_name
+    WHEN MATCHED THEN
+        UPDATE SET 
+            last_run_time = source.last_run_time
+    WHEN NOT MATCHED THEN
+        INSERT (carrier_name, last_run_time)
+        VALUES (source.carrier_name, source.last_run_time);
 
     -- Return success with row counts for ADF monitoring
     SELECT 

@@ -71,7 +71,7 @@ CREATE TABLE billing.delta_fedex_bill ( -- rename to delta_fedex_bill
 	[Updated Ref#2] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Updated Ref#3/PO Number] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Updated Department Reference Description] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	RMA# varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[RMA#] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Original Recipient Address Line 1] nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Original Recipient Address Line 2] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Original Recipient City] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -887,6 +887,18 @@ ON billing.carrier_bill (carrier_id, bill_date);
 
 -----------------------------------------------------------------------------------------------------------------
 
+-- Carrier Ingestion Tracker Table
+-- Purpose: Tracks last successful run timestamp per carrier for incremental processing
+-- Usage: Updated by Load_to_gold.sql after successful pipeline completion
+--        Read by ValidateCarrierInfo.sql to provide @lastrun parameter
+CREATE TABLE billing.carrier_ingestion_tracker (
+	carrier_name varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	last_run_time datetime2 NOT NULL,
+	CONSTRAINT PK_carrier_ingestion_tracker PRIMARY KEY (carrier_name)
+);
+
+-----------------------------------------------------------------------------------------------------------------
+
 CREATE TABLE dbo.shipping_method (
 	shipping_method_id int IDENTITY(1,1) NOT NULL,
 	carrier_id int NOT NULL,
@@ -911,14 +923,13 @@ ON dbo.shipping_method (carrier_id, is_active);
 
 CREATE TABLE dbo.charge_types (
 	charge_type_id int IDENTITY(1,1) NOT NULL,
-	carrier_id int NOT NULL,
-	charge_name varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	carrier_id int NULL,
+	charge_name nvarchar(510) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	freight bit NULL,
 	dt bit NULL,
-	markup bit NULL,
-	category varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	charge_category_id int NULL,
-	CONSTRAINT PK__charge_t__3BEF5FDF18D7DC05 PRIMARY KEY (charge_type_id)
+	markup bit NULL,
+	CONSTRAINT PK__charge_t__3BEF5FDF5218DF44 PRIMARY KEY (charge_type_id)
 );
 
 -- Unique constraint: Prevent duplicate charge types per carrier
@@ -932,13 +943,13 @@ ON dbo.charge_types (carrier_id, charge_category_id);
 -----------------------------------------------------------------------------------------------------------------
 
 CREATE TABLE billing.shipment_charges (
-	id int IDENTITY(1,1) NOT NULL,
+	id bigint IDENTITY(1,1) NOT NULL,
 	carrier_id int NOT NULL,
 	carrier_bill_id int NOT NULL,
 	tracking_number nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	charge_type_id int NOT NULL,
 	amount decimal(18,2) NULL,
-	shipment_attribute_id int NOT NULL,
+	shipment_attribute_id bigint NOT NULL,
 	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
 	CONSTRAINT PK__shipment__charges PRIMARY KEY (id),
 	CONSTRAINT FK_shipment_charges_attributes FOREIGN KEY (shipment_attribute_id) 
@@ -962,7 +973,7 @@ ON billing.shipment_charges (carrier_id, created_date);
 
 
 CREATE TABLE billing.shipment_attributes (
-	id int IDENTITY(1,1) NOT NULL,
+	id bigint IDENTITY(1,1) NOT NULL,
 	carrier_id int NOT NULL,
 	shipment_date datetime NULL,
 	shipping_method nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -999,7 +1010,7 @@ CREATE TABLE dbo.carrier_cost_ledger (
 	charge_type_id int NULL,
 	shipment_package_id int NULL,
 	carrier_bill_id int NULL,
-	shipment_attribute_id int NULL,  -- NEW: Links to physical shipment data for variance calculation
+	shipment_attribute_id bigint NULL,  -- NEW: Links to physical shipment data for variance calculation
 	is_matched bit DEFAULT 0 NOT NULL,
 	fee_id int NULL,
 	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
@@ -1036,10 +1047,8 @@ CREATE UNIQUE NONCLUSTERED INDEX UQ_carrier_cost_ledger_invoice_tracking_charge
 ON dbo.carrier_cost_ledger (carrier_bill_id, tracking_number, charge_type_id)
 WHERE carrier_bill_id IS NOT NULL AND charge_type_id IS NOT NULL;
 
--- Index for reconciliation queries (filter by status and date)
-CREATE NONCLUSTERED INDEX IX_carrier_cost_ledger_status_date
-ON dbo.carrier_cost_ledger (status, carrier_invoice_date)
-INCLUDE (is_matched, is_processed, amount, variance_amount);
+-- Note: IX_carrier_cost_ledger_status_date intentionally omitted.
+-- The reference design INCLUDEs variance_amount which does not exist in the current schema.
 
 -- Index for shipment attribute FK lookup performance
 CREATE NONCLUSTERED INDEX IX_carrier_cost_ledger_shipment_attribute_id
