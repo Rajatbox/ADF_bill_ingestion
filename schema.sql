@@ -872,6 +872,7 @@ CREATE TABLE billing.carrier_bill ( -- rename to carrier_bill
 	reconciled_amount decimal(18,2) NULL,
 	discrepancy_amount decimal(18,2) NULL,
 	bill_number varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	account_number varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	CONSTRAINT PK__carrier___A6B346871A6B3E58 PRIMARY KEY (carrier_bill_id)
 );
 

@@ -17,12 +17,25 @@ This project automates the ingestion of carrier billing CSV files into an Azure 
 ## 2. Parent Pipeline: `pl_Master_Ingestion`
 
 ### Purpose
-Entry point for all carrier billing file ingestion. Validates file structure and routes to appropriate carrier-specific child pipeline.
+Entry point for all carrier billing file ingestion. Validates file structure, account numbers, and routes to appropriate carrier-specific child pipeline. **Supports multiple carriers: FedEx, DHL, UPS, and USPS EasyPost.**
 
 ### Trigger Context
 Currently trigger not implemented - in development phase passing file URL as parameter to pipeline runs.
 
-**Future plans:** Will receive file path via event trigger (e.g., `falcon/fedex/594939735/bill.csv`).
+**Future plans:** Will receive file path via event trigger with carrier-specific folder structure:
+- FedEx: `falcon/fedex/594939735/bill.csv`
+- DHL: `falcon/dhl/0022161907/bill.csv`
+- UPS: `falcon/ups/000017X1R2/bill.csv`
+- USPS EasyPost: `falcon/usps - easy post/ca_589b9b61d0ed420890f0e826515491dd/bill.csv`
+
+### Supported Carriers
+
+| Carrier | Folder Name | Account Position | Account Column | Notes |
+|---------|-------------|------------------|----------------|-------|
+| **FedEx** | `fedex` | `Prop_1` | `[Bill to Account Number]` | Ordinal mapping (positional) |
+| **DHL** | `dhl` | `Prop_1` | `account_number` | Ordinal mapping (positional) |
+| **UPS** | `ups` | `Prop_2` | `[Account Number]` | Ordinal mapping (positional) |
+| **USPS EasyPost** | `usps - easy post` | Column name | `carrier_account_id` | Named column mapping (has headers) |
 
 ### Pipeline Variables
 
@@ -35,13 +48,21 @@ Currently trigger not implemented - in development phase passing file URL as par
 ```mermaid
 flowchart TD
     Start([Trigger: File Path]) --> SetVar[Set Variable: v_FileMetadata]
-    SetVar --> Lookup[Lookup: Account Validation]
-    Lookup --> IfCond{If Condition: Contract Check}
-    IfCond -->|False| Fail[Fail Activity]
-    IfCond -->|True| ExecutePipeline[Execute Pipeline: Child]
-    ExecutePipeline --> End([Complete])
-    Fail --> End
+    SetVar --> LookupFile[Lookup: Read First Row]
+    LookupFile --> ValidateCarrier[Lookup: ValidateCarrierInfo.sql]
+    ValidateCarrier -->|Success| Switch[Switch: Route by Carrier]
+    ValidateCarrier -->|Failure| End([Pipeline Fails])
+    Switch -->|fedex| FedexPipeline[Execute: pl_Fedex_transform]
+    Switch -->|dhl| DhlPipeline[Execute: pl_DHL_transform]
+    Switch -->|ups| UpsPipeline[Execute: pl_UPS_transform]
+    Switch -->|usps - easy post| UspsPipeline[Execute: pl_USPS_transform]
+    FedexPipeline --> End
+    DhlPipeline --> End
+    UpsPipeline --> End
+    UspsPipeline --> End
 ```
+
+---
 
 #### Activity 1: Set Variable - `v_FileMetadata`
 
@@ -51,182 +72,317 @@ flowchart TD
 
 **Output Array Structure:**
 - Index `[0]`: Tenant name (e.g., `falcon`)
-- Index `[1]`: Carrier name (e.g., `fedex`)
-- Index `[2]`: Account number (e.g., `594939735`)
+- Index `[1]`: Carrier name (e.g., `fedex`, `dhl`, `ups`, `usps - easy post`)
+- Index `[2]`: Account number (e.g., `594939735`, `0022161907`, `ca_589b9b61d0ed420890f0e826515491dd`)
 - Index `[3]`: Filename (e.g., `bill.csv`)
 
 This metadata drives routing, validation, and carrier-specific processing logic.
 
-#### Activity 2: Lookup - Account Validation
+---
 
-**Purpose:** Reads first data row from CSV to validate account number matches folder structure.
+#### Activity 2: Lookup - Read First Row from CSV
 
-**Configuration:**
-- Source: Blob CSV file
-- First Row Only: Yes
-- Column Access: By ordinal position (`Prop_0`, `Prop_1`, `Prop_2`, etc.)
-
-**Output:** Returns first row with account number in `Prop_2` and verifies presence of expected headers.
-
-#### Activity 3: If Condition - Contract Validation
-
-**Purpose:** Enforces contract-first validation to prevent ingestion of incorrect file formats.
-
-**Condition Expression:**
-```javascript
-@and(
-    equals(trim(string(activity('LookupAccountInFile').output.firstRow.Prop_2)), variables('v_FileMetadata')[2]),
-    contains(string(activity('LookupAccountInFile').output.firstRow), 'Commodity Description')
-)
-```
-
-**Validation Checks:**
-1. Account number in file (`Prop_2`) matches folder name
-2. File contains expected header `Commodity Description` (FedEx-specific validation)
-
-**True Branch:** Proceeds to Execute Pipeline activity.
-
-**False Branch:** Triggers Fail activity with error details.
-
-#### Activity 4 (False Branch): Fail Activity
-
-**Purpose:** Halts pipeline execution with descriptive error for troubleshooting.
+**Purpose:** Reads first data row from CSV file to extract account number for validation.
 
 **Configuration:**
-- Error Code: `ERR_FILE_CONTRACT_MISMATCH`
-- Error Message: `@concat('Validation Failed: Account mismatch or missing headers in file: ', pipeline().parameters.p_FilePath)`
+- **Source:** Azure Blob Storage (CSV file)
+- **First Row Only:** Yes
+- **Column Access:** 
+  - FedEx/DHL/UPS: By ordinal position (`Prop_0`, `Prop_1`, `Prop_2`, etc.)
+  - USPS EasyPost: By column name (CSV has headers)
 
-#### Activity 5 (True Branch): Execute Pipeline - Child Invocation
+**Output:** Returns entire first row as JSON object (e.g., `{"Prop_0": "...", "Prop_1": "594939735", ...}`)
 
-**Purpose:** Routes validated file to carrier-specific transformation pipeline.
-
-**Target Pipeline:** `pl_Fedex_transform` (currently hardcoded, will be parameterized by carrier name)
-
-**Parameters Passed:**
-- `v_Parent_FileMetadata`: Array containing parsed file path segments
-
-**Future Enhancement:** Dynamic child pipeline selection based on `v_FileMetadata[1]` (carrier name).
+**Note:** This activity does NOT validate - it only reads the data. Validation happens in the next activity.
 
 ---
 
-## 3. Child Pipeline: `fedex_transform` (`pl_Fedex_transform`)
+#### Activity 3: Lookup - `ValidateCarrierInfo.sql`
 
-### Purpose
-Processes FedEx billing data through staged transformation: raw CSV → staging → normalized → unified tables.
+**Purpose:** Multi-carrier account validation with SQL-based logic. Validates account number matches folder structure and retrieves carrier metadata.
+
+**Script:** `parent_pipeline/ValidateCarrierInfo.sql`
+
+**Input Parameters (via dynamic expressions):**
+1. `@RawJson`: Entire first row as JSON string from Activity 2
+2. `@InputCarrier`: Carrier name from `v_FileMetadata[1]` (lowercase)
+3. `@ExpectedAccount`: Account number from `v_FileMetadata[2]`
+
+**Validation Logic:**
+
+The script performs carrier-specific account validation using a CASE statement:
+
+```sql
+DECLARE @ActualAccountInFile NVARCHAR(100) = CASE 
+    WHEN @InputCarrier = 'fedex' THEN JSON_VALUE(@RawJson, '$.Prop_1')
+    WHEN @InputCarrier = 'dhl'   THEN JSON_VALUE(@RawJson, '$.Prop_1')
+    WHEN @InputCarrier = 'ups'   THEN JSON_VALUE(@RawJson, '$.Prop_2')
+    WHEN @InputCarrier = 'usps - easy post' THEN JSON_VALUE(@RawJson, '$.carrier_account_id')
+    ELSE 'UNKNOWN_CARRIER'
+END;
+```
+
+**Validation Rules:**
+1. **USPS EasyPost:** Uses `LIKE` matching (account ID format: `ca_xxxxx` where folder contains partial ID)
+2. **Other Carriers:** Exact match between file account and folder account
+3. **Unknown Carriers:** Raises error if carrier not recognized
+
+**Failure Behavior:**
+- Raises `RAISERROR` with descriptive message: `"Validation Failed. Carrier: {name} | Expected: {folder_account} | Found: {file_account}"`
+- ADF Lookup activity fails, halting pipeline execution
+- Error message visible in ADF monitoring
+
+**Success Behavior:**
+Returns carrier metadata for downstream activities:
+
+**Output Variables:**
+- `carrier_id` (INT): Carrier identifier from `dbo.carrier` table
+- `last_run_time` (DATETIME2): Last successful run timestamp (defaults to `'2000-01-01'` if first run)
+- `validated_carrier_name` (NVARCHAR): Lowercase carrier name for Switch activity routing
+
+**Tables Accessed:**
+- `dbo.carrier` (carrier master data)
+- `billing.carrier_ingestion_tracker` (run history for incremental processing)
+
+**Why SQL Instead of ADF IF Condition:**
+- **Maintainability:** Single source of truth for validation logic (easier to update)
+- **Flexibility:** JSON parsing handles any CSV structure (ordinal vs named columns)
+- **Error Handling:** Descriptive error messages with SQL `FORMATMESSAGE`
+- **Metadata Fetch:** Combines validation + carrier lookup in one activity (performance)
+- **No ADF Expression Limitations:** Complex logic easier in SQL than nested ADF expressions
+
+---
+
+#### Activity 4: Switch - Route by Carrier
+
+**Purpose:** Routes validated file to appropriate carrier-specific transformation pipeline based on carrier name.
+
+**Switch Expression:** `@activity('ValidateCarrierInfo').output.firstRow.validated_carrier_name`
+
+**Switch Cases:**
+
+| Case Value | Target Pipeline | Carrier |
+|------------|----------------|---------|
+| `fedex` | `pl_Fedex_transform` | FedEx |
+| `dhl` | `pl_DHL_transform` | DHL |
+| `ups` | `pl_UPS_transform` | UPS |
+| `usps - easy post` | `pl_USPS_transform` | USPS EasyPost |
+
+**Default Case:** Should never execute (validation would have failed earlier). Can optionally add Fail activity.
+
+**Parameters Passed to Child Pipelines:**
+- `p_carrier_id`: From ValidateCarrierInfo output
+- `p_last_run_time`: From ValidateCarrierInfo output
+- `v_FileMetadata`: Array containing parsed file path segments
+
+---
+
+### Multi-Carrier Account Number Positions
+
+Each carrier has a different CSV structure. Account numbers appear in different ordinal positions:
+
+**FedEx:**
+- **Column:** `[Bill to Account Number]`
+- **ADF Position:** `Prop_1` (Column 2, 0-indexed)
+- **Schema:** `billing.delta_fedex_bill.[Bill to Account Number]`
+- **Type:** Integer account number (e.g., `594939735`)
+
+**DHL:**
+- **Column:** `account_number`
+- **ADF Position:** `Prop_1` (Column 2, 0-indexed)
+- **Schema:** `billing.delta_dhl_bill.account_number`
+- **Type:** String account number (e.g., `0022161907`)
+- **Note:** DHL CSVs have HDR/DTL record types; account appears in DTL rows
+
+**UPS:**
+- **Column:** `[Account Number]`
+- **ADF Position:** `Prop_2` (Column 3, 0-indexed)
+- **Schema:** `billing.delta_ups_bill.[Account Number]`
+- **Type:** Alphanumeric account number (e.g., `000017X1R2`)
+
+**USPS EasyPost:**
+- **Column:** `carrier_account_id`
+- **ADF Position:** Named column (CSV includes headers)
+- **Schema:** `billing.delta_usps_easypost_bill.carrier_account_id`
+- **Type:** Carrier account ID format (e.g., `ca_589b9b61d0ed420890f0e826515491dd`)
+- **Validation:** Uses `CONTAINS` instead of exact match (folder may have partial ID)
+
+---
+
+## 3. Child Pipelines: Carrier-Specific Transformation
+
+### Overview
+Each carrier has a dedicated child pipeline that processes billing data through a standardized 4-stage transformation: **CSV → Staging → Normalized → Unified**. All carriers follow the same activity pattern but with carrier-specific SQL scripts and staging tables.
+
+**Supported Carriers:**
+- `pl_Fedex_transform` (FedEx)
+- `pl_DHL_transform` (DHL)
+- `pl_UPS_transform` (UPS)
+- `pl_USPS_transform` (USPS EasyPost)
 
 ### Parameters Received
 
 | Parameter | Type | Source | Purpose |
 |-----------|------|--------|---------|
-| `v_Parent_FileMetadata` | Array | Parent pipeline | File metadata for carrier identification |
+| `p_carrier_id` | INT | Parent pipeline (ValidateCarrierInfo) | Carrier identifier for data association |
+| `p_last_run_time` | DATETIME2 | Parent pipeline (ValidateCarrierInfo) | Incremental processing filter |
+| `v_FileMetadata` | Array | Parent pipeline | File metadata (tenant, carrier, account, filename) |
 
 ### Activity Execution Order
 
+**All carrier pipelines follow this standardized 4-activity pattern:**
+
 ```mermaid
 flowchart TD
-    Start([Execute Pipeline Triggered]) --> Act1[Activity 1: LookupCarrierInfo]
-    Act1 --> Act2[Activity 2: Copy Data]
-    Act2 --> Act3[Activity 3: Insert_ELT_&_CB]
-    Act3 --> Act4[Activity 4: Sync_Reference_Data]
-    Act4 --> Act5[Activity 5: Insert_Unified_tables]
-    Act5 --> End([Complete])
+    Start([Execute Pipeline Triggered]) --> Act1[Activity 1: Copy Data to Staging]
+    Act1 --> Act2[Activity 2: Insert_ELT_&_CB.sql]
+    Act2 --> Act3[Activity 3: Sync_Reference_Data.sql]
+    Act3 --> Act4[Activity 4: Insert_Unified_tables.sql]
+    Act4 --> End([Complete])
 ```
 
----
-
-#### Activity 1: Lookup - `LookupCarrierInfo.sql`
-
-**Purpose:** Retrieves carrier metadata and last run timestamp for incremental processing.
-
-**Script:** `fedex_transform/LookupCarrierInfo.sql`
-
-**Input Parameters:**
-- `v_FileMetadata[1]`: Carrier name (e.g., 'FedEx')
-
-**Tables Accessed:**
-- `dbo.carrier` (carrier master data)
-- `billing.carrier_ingestion_tracker` (run history)
-
-**Output Variables (for downstream activities):**
-- `carrier_id` (INT): Carrier identifier
-- `last_run_time` (DATETIME2): Last successful run timestamp, defaults to '2000-01-01' if first run
-
-**Idempotent:** Yes (read-only query)
-
-**Purpose Explanation:** This activity establishes the carrier context for all downstream transformations. The `carrier_id` is passed to SQL scripts to associate data with correct carrier, while `last_run_time` enables incremental processing by filtering only new records created since last successful run.
+**Note:** The legacy `LookupCarrierInfo.sql` activity has been replaced. Carrier metadata is now retrieved by the parent pipeline's `ValidateCarrierInfo.sql` script and passed as parameters.
 
 ---
 
-#### Activity 2: Copy Data - Load Staging Table
+### Activity 1: Copy Data - Load Staging Table
 
-**Purpose:** Loads raw CSV data into staging table with positional mapping to handle duplicate headers.
+**Purpose:** Loads raw CSV data into carrier-specific staging table.
 
-**Source:** Azure Blob Storage (CSV file)
+**Source:** Azure Blob Storage (CSV file from file path)
 
-**Target Table:** `billing.delta_fedex_bill`
+**Target Tables (by carrier):**
+- FedEx: `billing.delta_fedex_bill`
+- DHL: `billing.delta_dhl_bill`
+- UPS: `billing.delta_ups_bill`
+- USPS EasyPost: `billing.delta_usps_easypost_bill`
 
-**Configuration (handling messy CSVs):**
+**Configuration Options (carrier-specific):**
+
+**FedEx, DHL, UPS (Ordinal Mapping):**
 - **First Row as Header:** Unchecked (forces ordinal column names: `Prop_0`, `Prop_1`, etc.)
 - **Skip Line Count:** 1 (skips actual header row in file)
 - **Column Mapping:** Empty (strict ordinal positioning - Column 1 → Column 1)
+- **Reason:** Bypasses ADF's duplicate column name errors; FedEx CSVs have 50+ charge columns with duplicate names
+
+**USPS EasyPost (Named Column Mapping):**
+- **First Row as Header:** Checked (reads column names from CSV)
+- **Skip Line Count:** 0 (header row defines schema)
+- **Column Mapping:** Automatic by column name
+- **Reason:** Clean CSV structure with unique column names
 
 **Idempotent:** No (truncates staging table before each load, or uses date-based partitioning)
 
-**Purpose Explanation:** The "anonymous positional load" strategy bypasses ADF's duplicate column name errors by treating headers as ordinal positions. This enables ingestion of FedEx files containing 50+ charge columns with duplicate names (e.g., multiple "Commodity Description" columns indexed as `_1`, `_2`, etc.).
+**Purpose Explanation:** The "anonymous positional load" strategy (for FedEx/DHL/UPS) bypasses ADF's duplicate column name errors by treating headers as ordinal positions. This enables ingestion of messy CSVs with duplicate column names.
 
 ---
 
-#### Activity 3: Script - `Insert_ELT_&_CB.sql`
+### Activity 2: Script - `Insert_ELT_&_CB.sql`
 
-**Purpose:** Transforms staging data into normalized billing tables within a single transaction.
+**Purpose:** Transforms staging data into normalized billing tables within a single transaction. Aggregates line items into invoice summaries and preserves detailed shipment records.
 
-**Script:** `fedex_transform/Insert_ELT_&_CB.sql`
+**Scripts (by carrier):**
+- `fedex_transform/Insert_ELT_&_CB.sql`
+- `dhl_transform/Insert_ELT_&_CB.sql`
+- `ups_transform/Insert_ELT_&_CB.sql`
+- `usps_easypost_transform/Insert_ELT_&_CB.sql`
 
 **Input Parameters:**
-- `@Carrier_id`: From LookupCarrierInfo output
+- `@Carrier_id` (or `@carrier_id`): From parent pipeline parameter `p_carrier_id`
 
-**Target Tables:**
-1. `billing.carrier_bill` (invoice-level summaries)
-2. `billing.fedex_bill` (line-level shipment data)
+**Target Tables (2-step process):**
+
+**Step 1: Invoice-Level Aggregation**
+- **Table:** `billing.carrier_bill` (shared across all carriers)
+- **Columns Inserted:**
+  - `carrier_id` - Carrier identifier
+  - `bill_number` - Invoice/bill identifier (carrier-specific format)
+  - `bill_date` - Invoice date
+  - `total_amount` - Sum of all charges on invoice
+  - `num_shipments` - Count of shipments on invoice
+  - `account_number` - **NEW:** Account number from CSV file
+- **Grain:** One row per invoice per carrier
+- **Idempotency:** `NOT EXISTS (bill_number, bill_date, carrier_id)`
+
+**Step 2: Line-Item Detail**
+- **Tables (carrier-specific):**
+  - `billing.fedex_bill` (FedEx line items)
+  - `billing.dhl_bill` (DHL line items)
+  - `billing.ups_bill` (UPS line items)
+  - `billing.usps_easypost_bill` (USPS EasyPost line items)
+- **Contains:** Shipment-level details with `carrier_bill_id` foreign key
+- **Grain:** One row per shipment (varies by carrier)
+- **Idempotency:** `NOT EXISTS (carrier_bill_id, tracking_number, ...)` with carrier-specific checks
 
 **Transaction Boundaries:** 
 - **Transactional:** Yes (wrapped in `BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK`)
-- **ACID Properties:** Full atomicity - both tables succeed or both fail together
+- **ACID Properties:** Full atomicity - both steps succeed or both fail together
 - **Error Handling:** `TRY...CATCH` block with automatic rollback on error
 - **Auto Rollback:** `SET XACT_ABORT ON` ensures immediate rollback on any error
 
-**Idempotent:** Yes
-- Step 1: `INSERT ... WHERE NOT EXISTS (bill_number, bill_date)` prevents duplicate invoices
-- Step 2: `INSERT ... WHERE NOT EXISTS (invoice_number, invoice_date, carrier_bill_id)` prevents duplicate line items
-- Safe to retry after rollback (new `carrier_bill_id` values generated)
+**Carrier-Specific Account Number Sources:**
+
+| Carrier | Account Column in Staging Table | Example Value |
+|---------|--------------------------------|---------------|
+| FedEx | `[Bill to Account Number]` | `594939735` |
+| DHL | `account_number` | `0022161907` |
+| UPS | `[Account Number]` | `000017X1R2` |
+| USPS EasyPost | `carrier_account_id` | `ca_589b9b61d0ed420890f0e826515491dd` |
+
+**SQL Pattern (all carriers):**
+```sql
+INSERT INTO billing.carrier_bill (
+    carrier_id, bill_number, bill_date, total_amount, num_shipments, account_number
+)
+SELECT
+    @Carrier_id,
+    [invoice_identifier],
+    [invoice_date],
+    SUM([charge_amounts]),
+    COUNT(*),
+    MAX([account_column_name])  -- Extract account number
+FROM [staging_table]
+GROUP BY [invoice_identifier], [invoice_date]
+HAVING NOT EXISTS (
+    SELECT 1 FROM billing.carrier_bill
+    WHERE bill_number = [invoice_identifier]
+      AND bill_date = [invoice_date]
+      AND carrier_id = @Carrier_id
+);
+```
 
 **Output Variables:**
 - `Status`: 'SUCCESS' or 'ERROR'
 - `InvoicesInserted`: Number of carrier_bill records inserted
-- `LineItemsInserted`: Number of fedex_bill records inserted
-- `ErrorNumber`, `ErrorMessage`: Error details (if failure)
+- `LineItemsInserted`: Number of carrier-specific bill records inserted
+- `ErrorNumber`, `ErrorMessage`, `ErrorLine`: Error details (if failure)
 
-**Purpose Explanation:** This two-step transactional script is the core normalization phase. Step 1 aggregates staging data by invoice (bill_number + bill_date) to create summaries with total amounts and shipment counts, generating `carrier_bill_id` surrogate keys. Step 2 inserts line-level details with foreign key references to carrier_bill. The transaction ensures referential integrity - you'll never have orphaned line items without invoice headers. Idempotency via NOT EXISTS checks makes the pipeline safe to retry after transient failures.
+**Purpose Explanation:** This two-step transactional script is the core normalization phase. Step 1 aggregates staging data by invoice to create summaries with total amounts, shipment counts, and **account numbers**, generating `carrier_bill_id` surrogate keys. Step 2 inserts line-level details with foreign key references to carrier_bill. The transaction ensures referential integrity - you'll never have orphaned line items without invoice headers. Idempotency via NOT EXISTS checks makes the pipeline safe to retry after transient failures.
 
 ---
 
-#### Activity 4: Script - `Sync_Reference_Data.sql`
+### Activity 3: Script - `Sync_Reference_Data.sql`
 
-**Purpose:** Auto-discovers and populates reference tables with new charge types and shipping methods from processed billing data.
+**Purpose:** Auto-discovers and populates reference tables with new charge types and shipping methods from processed billing data. Ensures all downstream foreign key relationships are valid.
 
-**Script:** `fedex_transform/Sync_Reference_Data.sql`
+**Scripts (by carrier):**
+- `fedex_transform/Sync_Reference_Data.sql`
+- `dhl_transform/Sync_Reference_Data.sql`
+- `ups_transform/Sync_Reference_Data.sql`
+- `usps_easypost_transform/Sync_Reference_Data.sql`
 
 **Input Parameters:**
-- `@Carrier_id`: From LookupCarrierInfo output
-- `@lastrun`: From LookupCarrierInfo output (filters new data only)
+- `@Carrier_id` (or `@carrier_id`): From parent pipeline parameter `p_carrier_id`
+- `@lastrun`: From parent pipeline parameter `p_last_run_time` (filters new data only)
 
-**Source Tables:**
-- `billing.delta_fedex_bill` (for service types)
-- `billing.vw_FedExCharges` (for charge descriptions)
+**Source Tables (carrier-specific):**
+- Carrier-specific staging tables (e.g., `billing.delta_fedex_bill`)
+- Carrier-specific views for charge unpivoting (e.g., `billing.vw_FedExCharges`)
+- Carrier-specific bill tables (e.g., `billing.dhl_bill`)
 
-**Target Tables:**
-1. `dbo.shipping_method` (service types like 'Ground', 'Express')
-2. `dbo.charge_types` (charge descriptions like 'Fuel Surcharge', 'Residential Delivery')
+**Target Tables (shared across all carriers):**
+1. `dbo.shipping_method` - Service types (e.g., 'Ground', 'Express', 'DHL Parcel International Standard')
+2. `dbo.charge_types` - Charge descriptions (e.g., 'Fuel Surcharge', 'Residential Delivery', 'Delivery Area Surcharge')
 
 **Transaction Boundaries:** 
 - **Transactional:** No (two separate INSERT statements)
@@ -241,37 +397,88 @@ flowchart TD
 - `ShippingMethodsAdded`: Count of new shipping methods discovered
 - `ChargeTypesAdded`: Count of new charge types discovered
 
-**Purpose Explanation:** This script automatically maintains lookup tables by discovering new values from live data. When FedEx introduces a new service type or charge description, it's automatically captured and added to reference tables for future lookups. The auto-discovery approach eliminates manual reference data maintenance and ensures downstream transformations always have valid foreign key mappings. Categorization logic applies business rules (e.g., charges containing 'adjustment' → category 16, others → category 11).
+**Carrier-Specific Examples:**
+
+**FedEx:**
+- Discovers service types from `[Service Type]` column (e.g., 'FedEx Ground', 'FedEx Express Saver')
+- Unpivots 50+ charge columns via `vw_FedExCharges` view
+
+**DHL:**
+- Discovers service types from `shipping_method` column (e.g., 'DHL Parcel International Standard')
+- Extracts charges from specific charge columns (transportation, fuel, surcharges)
+
+**UPS:**
+- Discovers service types from charge descriptions
+- Each row in CSV is one charge (narrow format)
+
+**USPS EasyPost:**
+- Discovers service types from `service` column (e.g., 'GroundAdvantage', 'Priority')
+- Extracts charges from fee columns (postage_fee, label_fee, insurance_fee)
+
+**Purpose Explanation:** This script automatically maintains lookup tables by discovering new values from live data. When carriers introduce new service types or charge descriptions, they're automatically captured and added to reference tables for future lookups. The auto-discovery approach eliminates manual reference data maintenance and ensures downstream transformations always have valid foreign key mappings. Categorization logic applies business rules (e.g., charges containing 'adjustment' → category 16, others → category 11).
 
 ---
 
-#### Activity 5: Script - `Insert_Unified_tables.sql`
+### Activity 4: Script - `Insert_Unified_tables.sql`
 
-**Purpose:** Transforms normalized billing data into unified analytical tables with Multi-Piece Shipment (MPS) logic, creating business key relationships.
+**Purpose:** Transforms carrier-specific normalized billing data into unified analytical tables. Creates standardized business keys (`carrier_id + tracking_number`) and itemized charge breakdowns for cross-carrier analysis.
 
-**Script:** `fedex_transform/Insert_Unified_tables.sql`
+**Scripts (by carrier):**
+- `fedex_transform/Insert_Unified_tables.sql`
+- `dhl_transform/Insert_Unified_tables.sql`
+- `ups_transform/Insert_Unified_tables.sql`
+- `usps_easypost_transform/Insert_Unified_tables.sql`
 
 **Input Parameters:**
-- `@Carrier_id`: From LookupCarrierInfo output
-- `@lastrun`: From LookupCarrierInfo output (incremental processing)
+- `@Carrier_id` (or `@carrier_id`): From parent pipeline parameter `p_carrier_id`
+- `@lastrun`: From parent pipeline parameter `p_last_run_time` (incremental processing)
 
-**Source Tables:**
-- `billing.fedex_bill` (for shipment attributes with MPS classification)
-- `billing.vw_FedExCharges` (unpivoted charge data)
-- `dbo.charge_types` (charge type lookups)
+**Source Tables (carrier-specific):**
+- Carrier-specific bill tables (e.g., `billing.fedex_bill`, `billing.dhl_bill`)
+- Carrier-specific charge views (e.g., `billing.vw_FedExCharges`, `billing.vw_DHLCharges`)
+- `dbo.charge_types` (for charge type FK lookups)
+- `dbo.shipping_method` (for service type FK lookups)
 
-**Target Tables (2-part pipeline):**
+**Target Tables (2-part process, shared across all carriers):**
 
-**Part 1:** `billing.shipment_attributes`
-- Business key: `carrier_id + tracking_number` (UNIQUE constraint)
-- Contains: Shipment metadata (date, zone, dimensions, weight) - NO cost stored
-- MPS Logic: 4-stage CTE pipeline classifies shipments (NORMAL_SINGLE, MPS_HEADER, MPS_PARENT, MPS_CHILD) and hoists header values to group members
-- Filters out MPS_HEADER rows (summary rows not actual packages)
+**Part 1: Shipment Attributes**
+- **Table:** `billing.shipment_attributes`
+- **Business Key:** `carrier_id + tracking_number` (UNIQUE constraint)
+- **Contains:** 
+  - Shipment metadata: date, zone, dimensions, weight, service type
+  - Recipient address information
+  - **NO cost stored** - calculated via view
+- **Unit Conversions Applied:**
+  - Weight → OZ (LB × 16, KG × 35.274)
+  - Dimensions → IN (CM ÷ 2.54, MM ÷ 25.4)
+- **Carrier-Specific Logic:**
+  - **FedEx:** 4-stage CTE for MPS (Multi-Piece Shipment) classification
+  - **DHL:** Differentiates international vs domestic tracking numbers
+  - **UPS:** Handles wide charge format (one row per charge per tracking number)
+  - **USPS EasyPost:** Simple 1:1 mapping from staging
 
-**Part 2:** `billing.shipment_charges`
-- Contains: Itemized charge breakdown per shipment
-- Foreign Key: `shipment_attribute_id` references `shipment_attributes(id)` (establishes 1-to-Many relationship)
-- Single source of truth: `billed_shipping_cost` calculated via `vw_shipment_summary` view from SUM(charges)
+**Part 2: Shipment Charges**
+- **Table:** `billing.shipment_charges`
+- **Contains:** Itemized charge breakdown per shipment
+- **Foreign Key:** `shipment_attribute_id` references `shipment_attributes(id)` (1-to-Many)
+- **Columns:** `charge_type_id`, `amount`, `carrier_bill_id`, `tracking_number`
+- **Single Source of Truth:** `billed_shipping_cost` calculated via `vw_shipment_summary` view (SUM of charges)
+
+**FedEx-Specific: Multi-Piece Shipment (MPS) Logic**
+
+FedEx billing includes MPS groups where multiple packages share one master tracking number:
+
+**MPS Classification (4-stage CTE pipeline):**
+1. **fx_tallied:** Count occurrences of each tracking ID
+2. **fx_classified:** Classify into roles (NORMAL_SINGLE, MPS_HEADER, MPS_PARENT, MPS_CHILD)
+3. **fx_hoisted:** Hoist header values via window functions (propagate group data)
+4. **fx_final:** Apply unit conversions, filter out MPS_HEADER rows
+
+**MPS Roles:**
+- `NORMAL_SINGLE`: Standard single-package shipment
+- `MPS_HEADER`: Group summary row (filtered out, not an actual package)
+- `MPS_PARENT`: First package in MPS group
+- `MPS_CHILD`: Additional packages in group
 
 **Transaction Boundaries:** 
 - **Transactional:** No (two separate INSERT statements)
@@ -279,8 +486,8 @@ flowchart TD
 - **Part 2 Dependency:** Requires Part 1 completion for FK lookups (within same script execution)
 
 **Idempotent:** Yes
-- Part 1: `INSERT ... WHERE NOT EXISTS (carrier_id, tracking_number)` + UNIQUE constraint prevents duplicate attributes
-- Part 2: `INSERT ... WHERE NOT EXISTS (carrier_bill_id, tracking_number, charge_type_id)` prevents duplicate charges
+- Part 1: `INSERT ... WHERE NOT EXISTS (carrier_id, tracking_number)` + UNIQUE constraint prevents duplicates
+- Part 2: `INSERT ... WHERE NOT EXISTS (carrier_bill_id, tracking_number, charge_type_id)` prevents duplicates
 - View recalculates cost from whatever charges exist (always correct)
 - Safe to rerun with same `@lastrun` - no double-counting, no corruption
 
@@ -290,7 +497,7 @@ flowchart TD
 - `ChargesInserted`: Number of shipment_charges records inserted
 - `ErrorNumber`, `ErrorMessage`, `ErrorLine`: Error details (if failure)
 
-**Purpose Explanation:** This is the unified data model population phase, transforming carrier-specific normalized data into a standardized analytical structure. The MPS logic handles FedEx's multi-piece shipment billing (multiple packages under one master tracking number) by classifying rows into roles, hoisting header metadata to all group members, and filtering out summary rows. The 1-to-Many relationship between attributes and charges enables flexible cost tracking - corrections/adjustments automatically accumulate via the view calculation (single source of truth). No stored cost in attributes table eliminates sync bugs. Idempotency is architected via constraints and NOT EXISTS checks rather than transactions, making the pipeline resilient to partial failures and safe for unlimited retries.
+**Purpose Explanation:** This is the unified data model population phase, transforming carrier-specific normalized data into a standardized analytical structure. All carriers write to the same two tables (`shipment_attributes` and `shipment_charges`), enabling cross-carrier analysis and reporting. The business key (`carrier_id + tracking_number`) uniquely identifies shipments across all carriers. The 1-to-Many relationship between attributes and charges enables flexible cost tracking - corrections/adjustments automatically accumulate via the view calculation (single source of truth). No stored cost in attributes table eliminates sync bugs. Idempotency is architected via constraints and NOT EXISTS checks rather than transactions, making the pipeline resilient to partial failures and safe for unlimited retries.
 
 ---
 
@@ -298,35 +505,46 @@ flowchart TD
 
 ### Architecture Layers
 
+**Multi-Carrier Support:** All carriers follow the same 3-layer architecture (Staging → Normalized → Unified). Carrier-specific tables exist in Staging and Normalized layers, while Unified layer tables are shared across all carriers.
+
 ```mermaid
 flowchart LR
-    CSV[CSV File] --> Staging[Staging Layer]
+    CSV[CSV Files] --> Staging[Staging Layer]
     Staging --> Normalized[Normalized Layer]
     Normalized --> Unified[Unified Layer]
     
-    subgraph Staging [Staging Layer]
-        DeltaFedex[delta_fedex_bill<br/>Raw CSV replica]
+    subgraph Staging [Staging Layer - Carrier-Specific]
+        DeltaFedex[delta_fedex_bill]
+        DeltaDHL[delta_dhl_bill]
+        DeltaUPS[delta_ups_bill]
+        DeltaUSPS[delta_usps_easypost_bill]
     end
     
     subgraph Normalized [Normalized Layer]
-        CarrierBill[carrier_bill<br/>Invoice summaries]
-        FedexBill[fedex_bill<br/>Line items]
+        CarrierBill[carrier_bill<br/>Shared: All carriers<br/>Includes account_number]
+        FedexBill[fedex_bill<br/>Carrier-specific]
+        DHLBill[dhl_bill<br/>Carrier-specific]
+        UPSBill[ups_bill<br/>Carrier-specific]
+        USPSBill[usps_easypost_bill<br/>Carrier-specific]
     end
     
-    subgraph Unified [Unified Layer]
-        ShipmentAttr[shipment_attributes<br/>Business key]
+    subgraph Unified [Unified Layer - Shared]
+        ShipmentAttr[shipment_attributes<br/>Business key: carrier_id + tracking_number]
         ShipmentCharges[shipment_charges<br/>Charge details]
         ChargeTypes[charge_types<br/>Reference]
         ShippingMethod[shipping_method<br/>Reference]
     end
     
     FedexBill -.FK.-> CarrierBill
+    DHLBill -.FK.-> CarrierBill
+    UPSBill -.FK.-> CarrierBill
+    USPSBill -.FK.-> CarrierBill
     ShipmentCharges -.FK.-> ShipmentAttr
 ```
 
 ### Business Key Concept
 
-**`shipment_attributes.id`** serves as the universal business key representing unique `carrier_id + tracking_number` combinations.
+**`shipment_attributes.id`** serves as the universal business key representing unique `carrier_id + tracking_number` combinations across all carriers.
 
 **Enforced by:**
 - PRIMARY KEY on `id` (IDENTITY)
@@ -344,16 +562,39 @@ flowchart LR
 
 ### Table Relationships
 
-| Layer | Table | Purpose | Key Columns | Grain |
-|-------|-------|---------|-------------|-------|
-| **Staging** | `delta_fedex_bill` | Raw CSV (wide format) | All FedEx columns as-is | One row per package in CSV |
-| **Normalized** | `carrier_bill` | Invoice summaries | `carrier_bill_id` (PK), `bill_number`, `bill_date` | One row per invoice |
-| **Normalized** | `fedex_bill` | Line items | `id` (PK), `carrier_bill_id` (FK), `tracking_number` | One row per package |
-| **Unified** | `shipment_attributes` | Shipment master | `id` (PK), `tracking_number`, metadata (NO cost) | One row per unique tracking_number |
-| **Unified** | `shipment_charges` | Charge breakdown | `id` (PK), `shipment_attribute_id` (FK), `charge_type_id` (FK) | One row per charge per shipment |
-| **Reference** | `charge_types` | Charge lookup | `charge_type_id` (PK), `charge_name`, `carrier_id` | One row per charge type per carrier |
-| **Reference** | `shipping_method` | Service lookup | `shipping_method_id` (PK), `method_name`, `carrier_id` | One row per service type per carrier |
-| **View** | `vw_shipment_summary` | Calculated cost | All `shipment_attributes` + `billed_shipping_cost` (SUM) | One row per unique tracking_number |
+| Layer | Table | Purpose | Key Columns | Grain | Multi-Carrier |
+|-------|-------|---------|-------------|-------|---------------|
+| **Staging** | `delta_[carrier]_bill` | Raw CSV replica | Carrier-specific columns | One row per CSV record | ❌ Carrier-specific |
+| **Normalized** | `carrier_bill` | Invoice summaries | `carrier_bill_id` (PK), `bill_number`, `bill_date`, `carrier_id`, `account_number` | One row per invoice per carrier | ✅ **Shared** |
+| **Normalized** | `[carrier]_bill` | Line items | `id` (PK), `carrier_bill_id` (FK), `tracking_number` | Varies by carrier format | ❌ Carrier-specific |
+| **Unified** | `shipment_attributes` | Shipment master | `id` (PK), `carrier_id`, `tracking_number`, metadata (NO cost) | One row per unique carrier_id + tracking_number | ✅ **Shared** |
+| **Unified** | `shipment_charges` | Charge breakdown | `id` (PK), `shipment_attribute_id` (FK), `charge_type_id` (FK), `amount` | One row per charge per shipment | ✅ **Shared** |
+| **Reference** | `charge_types` | Charge lookup | `charge_type_id` (PK), `charge_name`, `carrier_id` | One row per charge type per carrier | ✅ **Shared** |
+| **Reference** | `shipping_method` | Service lookup | `shipping_method_id` (PK), `method_name`, `carrier_id` | One row per service type per carrier | ✅ **Shared** |
+| **View** | `vw_shipment_summary` | Calculated cost | All `shipment_attributes` + `billed_shipping_cost` (SUM) | One row per unique carrier_id + tracking_number | ✅ **Shared** |
+
+### carrier_bill Table Details
+
+**Purpose:** Shared invoice summary table for all carriers. Aggregates line items by invoice, capturing total amounts, shipment counts, and account numbers.
+
+**Key Columns:**
+- `carrier_bill_id` (PK, IDENTITY) - Surrogate key
+- `carrier_id` - Foreign key to `dbo.carrier` table
+- `bill_number` - Invoice/bill identifier (carrier-specific format)
+- `bill_date` - Invoice date
+- `total_amount` - Sum of all charges on invoice
+- `num_shipments` - Count of shipments on invoice
+- `account_number` - **Account number from CSV file** (extracted during ingestion)
+
+**Unique Constraint:**
+- `UQ_carrier_bill_number_date_carrier` on `(bill_number, bill_date, carrier_id)`
+- Prevents duplicate invoices per carrier
+
+**Account Number Sources:**
+- FedEx: `[Bill to Account Number]` (e.g., `594939735`)
+- DHL: `account_number` (e.g., `0022161907`)
+- UPS: `[Account Number]` (e.g., `000017X1R2`)
+- USPS EasyPost: `carrier_account_id` (e.g., `ca_589b9b61d0ed420890f0e826515491dd`)
 
 ---
 
@@ -362,29 +603,32 @@ flowchart LR
 ### Error Handling Strategy
 
 **Parent Pipeline:**
-- **Validation Failures:** Fail activity halts execution with error code `ERR_FILE_CONTRACT_MISMATCH`
-- **Monitoring:** Error message includes full file path for troubleshooting
+- **Validation Failures:** `ValidateCarrierInfo.sql` raises `RAISERROR`, halting pipeline execution
+- **Error Messages:** Descriptive messages include carrier name, expected account, and found account
+  - Format: `"Validation Failed. Carrier: {name} | Expected: {folder_account} | Found: {file_account}"`
+- **Monitoring:** Error details visible in ADF Lookup activity monitoring
+- **Unknown Carriers:** Script raises error if carrier not recognized in CASE statement
 
-**Child Pipeline:**
+**Child Pipelines:**
 - **Activity-Level Errors:** Each SQL script returns structured error information
-- **Transactional Rollback:** Insert_ELT_&_CB.sql automatically rolls back on failure
-- **ADF Retry:** Pipeline can safely retry failed activities due to idempotency design
+  - `Status`: 'SUCCESS' or 'ERROR'
+  - `ErrorNumber`, `ErrorMessage`, `ErrorLine`: Detailed error context
+- **Transactional Rollback:** `Insert_ELT_&_CB.sql` automatically rolls back on failure
+- **ADF Retry:** Pipelines can safely retry failed activities due to idempotency design
 
 ### Retry Behavior
 
 **Safe to Retry (Idempotent Activities):**
-1. ✅ `LookupCarrierInfo` - Read-only query
-2. ✅ `Insert_ELT_&_CB` - NOT EXISTS checks + transaction rollback creates clean state
-3. ✅ `Sync_Reference_Data` - NOT EXISTS checks prevent duplicates
-4. ✅ `Insert_Unified_tables` - Constraints + NOT EXISTS checks prevent duplicates
-
-**Requires Manual Intervention:**
-- ❌ `Copy Data` - Staging table should be truncated before retry (or use date-based partitioning)
+1. ✅ `ValidateCarrierInfo.sql` - Read-only query with validation logic
+2. ✅ `Copy Data` - Truncates staging table before load (idempotent by design)
+3. ✅ `Insert_ELT_&_CB.sql` - NOT EXISTS checks + transaction rollback creates clean state
+4. ✅ `Sync_Reference_Data.sql` - NOT EXISTS checks prevent duplicates
+5. ✅ `Insert_Unified_tables.sql` - Constraints + NOT EXISTS checks prevent duplicates
 
 **Retry Scenario Example:**
 
-| Event | carrier_bill | fedex_bill | State |
-|-------|--------------|------------|-------|
+| Event | carrier_bill | [carrier]_bill | State |
+|-------|--------------|----------------|-------|
 | **First Attempt** | Inserts invoice (id=1001) | Fails on row 101/150 | ❌ Rollback |
 | **After Rollback** | No data (id=1001 deleted) | No data | ✅ Clean |
 | **Retry** | Inserts invoice (id=1002) | All 150 rows succeed | ✅ Success |
@@ -410,15 +654,17 @@ Each transformation activity returns row counts for monitoring:
 
 ### Incremental Processing
 
-**Mechanism:** `@lastrun` parameter (from `carrier_ingestion_tracker` table)
+**Mechanism:** `@lastrun` parameter (from `carrier_ingestion_tracker` table via `ValidateCarrierInfo.sql`)
 
 **Activities Using Incremental Filter:**
-- `Sync_Reference_Data.sql`: Filters `vw_FedExCharges.created_date > @lastrun`
-- `Insert_Unified_tables.sql`: Filters `fedex_bill.created_date > @lastrun`
+- `Sync_Reference_Data.sql`: Filters new data based on `created_date > @lastrun`
+- `Insert_Unified_tables.sql`: Filters new records based on `created_date > @lastrun`
 
 **First Run Behavior:** `@lastrun` defaults to '2000-01-01', processing all historical data
 
 **Subsequent Runs:** Only processes records created since last successful run
+
+**Source:** Parent pipeline's `ValidateCarrierInfo.sql` retrieves `last_run_time` from `carrier_ingestion_tracker` table and passes to child pipeline
 
 **Update Mechanism:** `carrier_ingestion_tracker.last_run_time` updated after successful pipeline completion (future enhancement)
 
@@ -426,10 +672,18 @@ Each transformation activity returns row counts for monitoring:
 
 ## 6. Future Enhancements
 
-### Multi-Carrier Support
-- Parameterize child pipeline selection based on carrier name
-- Add child pipelines for additional carriers (UPS, DHL, etc.)
-- Carrier-specific transformation logic isolated in separate folders
+### ✅ Completed: Multi-Carrier Support
+- ✅ **Implemented:** Parameterized child pipeline selection via Switch activity based on carrier name
+- ✅ **Implemented:** Four carriers supported: FedEx, DHL, UPS, USPS EasyPost
+- ✅ **Implemented:** Carrier-specific transformation logic isolated in separate folders (`[carrier]_transform/`)
+- ✅ **Implemented:** Multi-carrier account validation via `ValidateCarrierInfo.sql`
+- ✅ **Implemented:** Account number captured in `carrier_bill` table for all carriers
+
+### Additional Carriers
+- Add support for additional carriers as needed (e.g., OnTrac, LSO, etc.)
+- Follow established pattern: Create `[carrier]_transform/` folder with 3 scripts
+- Update `ValidateCarrierInfo.sql` with new carrier's account position
+- Add new case to parent pipeline Switch activity
 
 ### Monitoring & Alerting
 - Automated data quality checks post-ingestion
@@ -502,25 +756,63 @@ Each transformation activity returns row counts for monitoring:
 
 ## 7. Related Files
 
-### SQL Scripts
+### Parent Pipeline Scripts
 
 | File | Purpose | Execution Order |
 |------|---------|-----------------|
-| `fedex_transform/LookupCarrierInfo.sql` | Carrier metadata retrieval | 1st (Lookup Activity) |
-| `fedex_transform/Insert_ELT_&_CB.sql` | Staging to normalized transformation | 2nd (Script Activity) |
-| `fedex_transform/Sync_Reference_Data.sql` | Reference table auto-population | 3rd (Script Activity) |
-| `fedex_transform/Insert_Unified_tables.sql` | Normalized to unified transformation | 4th (Script Activity) |
-| `fedex_transform/Fedex_charges.sql` | View: Unpivots 50 charge columns | Used by Activity 4 & 5 |
+| `parent_pipeline/ValidateCarrierInfo.sql` | Multi-carrier account validation + carrier metadata retrieval | 1st (Lookup Activity) |
+| `parent_pipeline/LookupCarrierInfo.sql` | **Legacy:** Replaced by ValidateCarrierInfo.sql | Deprecated |
+| `parent_pipeline/Load_to_gold.sql` | Post-processing script (if used) | After child pipeline completion |
+
+### Carrier-Specific SQL Scripts
+
+**All carriers follow this standardized 3-script pattern:**
+
+| Carrier | Script | Purpose | Execution Order |
+|---------|--------|---------|-----------------|
+| **FedEx** | `fedex_transform/Insert_ELT_&_CB.sql` | Staging → Normalized (transactional) | 1st |
+| | `fedex_transform/Sync_Reference_Data.sql` | Auto-discover shipping methods and charge types | 2nd |
+| | `fedex_transform/Insert_Unified_tables.sql` | Normalized → Unified (with MPS logic) | 3rd |
+| | `fedex_transform/Fedex_charges.sql` | View: Unpivots 50 charge columns | Referenced by scripts |
+| **DHL** | `dhl_transform/Insert_ELT_&_CB.sql` | Staging → Normalized (transactional) | 1st |
+| | `dhl_transform/Sync_Reference_Data.sql` | Auto-discover shipping methods and charge types | 2nd |
+| | `dhl_transform/Insert_Unified_tables.sql` | Normalized → Unified | 3rd |
+| **UPS** | `ups_transform/Insert_ELT_&_CB.sql` | Staging → Normalized (transactional) | 1st |
+| | `ups_transform/Sync_Reference_Data.sql` | Auto-discover shipping methods and charge types | 2nd |
+| | `ups_transform/Insert_Unified_tables.sql` | Normalized → Unified | 3rd |
+| **USPS EasyPost** | `usps_easypost_transform/Insert_ELT_&_CB.sql` | Staging → Normalized (transactional) | 1st |
+| | `usps_easypost_transform/Sync_Reference_Data.sql` | Auto-discover shipping methods and charge types | 2nd |
+| | `usps_easypost_transform/Insert_Unified_tables.sql` | Normalized → Unified | 3rd |
 
 ### Documentation
 
 | File | Purpose |
 |------|---------|
-| `schema.sql` | Complete database schema DDL |
-| `LLM_Context_Carrier_Integration.md` | Carrier-specific business logic & FedEx implementation details |
+| `schema.sql` | Complete database schema DDL (all carriers + unified tables) |
+| `DESIGN_CONSTRAINTS.md` | 10 design rules for carrier integration |
+| `fedex_transform/FEDEX_SPECIFIC_LOGIC.md` | FedEx MPS logic and business rules |
+| `dhl_transform/additional_reference.md` | DHL-specific reference documentation |
+| `ups_transform/UPS_reference_doc.md` | UPS-specific reference documentation |
+| `usps_easypost_transform/IMPLEMENTATION_SUMMARY.md` | USPS EasyPost implementation notes |
 | `techdebt.md` | Known technical debt and planned improvements |
 | `architecture.md` | This document - pipeline architecture and orchestration |
 
-### Pipeline Configuration
-- Parent Pipeline: `pl_Master_Ingestion` (ADF)
-- Child Pipeline: `pl_Fedex_transform` (ADF)
+### Pipeline Configuration (ADF)
+
+**Parent Pipeline:**
+- `pl_Master_Ingestion` - Entry point with ValidateCarrierInfo and Switch routing
+
+**Child Pipelines:**
+- `pl_Fedex_transform` - FedEx transformation pipeline
+- `pl_DHL_transform` - DHL transformation pipeline
+- `pl_UPS_transform` - UPS transformation pipeline
+- `pl_USPS_transform` - USPS EasyPost transformation pipeline
+
+### Example CSV Files
+
+| Carrier | Example File | Notes |
+|---------|-------------|-------|
+| FedEx | (Not in repo) | Wide format with 50+ charge columns |
+| DHL | `dhl_transform/dhl_example_bill.csv` | HDR/DTL record types |
+| UPS | `ups_transform/ups_example_bill.csv` | Narrow format (one charge per row) |
+| USPS EasyPost | `usps_easypost_transform/usps_easypost_example_bill.csv` | Clean CSV with headers |

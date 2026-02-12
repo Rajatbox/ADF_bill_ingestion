@@ -73,14 +73,16 @@ BEGIN TRY
         bill_number,
         bill_date,
         total_amount,
-        num_shipments
+        num_shipments,
+        account_number
     )
     SELECT
         @Carrier_id AS carrier_id,
         CONCAT(d.carrier_account_id, '-', FORMAT(CAST(d.created_at AS DATE), 'yyyy-MM-dd')) AS bill_number,
         CAST(d.created_at AS DATE) AS bill_date,
         SUM(CAST(COALESCE(NULLIF(TRIM(d.postage_fee), ''), '0') AS decimal(18,2))) AS total_amount,
-        COUNT(d.tracking_code) AS num_shipments
+        COUNT(d.tracking_code) AS num_shipments,
+        MAX(d.carrier_account_id) AS account_number
     FROM
         billing.delta_usps_easypost_bill AS d
     WHERE

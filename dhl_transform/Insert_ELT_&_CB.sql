@@ -65,7 +65,8 @@ BEGIN TRY
         bill_number,
         bill_date,
         total_amount,
-        num_shipments
+        num_shipments,
+        account_number
     )
     SELECT
         @Carrier_id AS carrier_id,
@@ -77,7 +78,8 @@ BEGIN TRY
             + ISNULL(CAST(NULLIF(TRIM(d.fuel_surcharge_amount), '') AS decimal(18,2)), 0)
             + ISNULL(CAST(NULLIF(TRIM(d.delivery_area_surcharge_amount), '') AS decimal(18,2)), 0)
         ) AS total_amount,
-        COUNT(*) AS num_shipments
+        COUNT(*) AS num_shipments,
+        MAX(d.account_number) AS account_number
     FROM
         billing.delta_dhl_bill AS d
     WHERE

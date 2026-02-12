@@ -67,14 +67,16 @@ BEGIN TRY
         bill_number,
         bill_date,
         total_amount,
-        num_shipments
+        num_shipments,
+        account_number
     )
     SELECT
         @Carrier_id AS carrier_id,
         CAST(d.[Invoice Number] AS nvarchar(50)) AS bill_number,
         CAST(NULLIF(TRIM(CAST(d.[Invoice Date] AS varchar)), '') AS date) AS bill_date,
         SUM(TRY_CAST(REPLACE(d.[Net Charge Amount], ',', '') AS decimal(18,2))) AS total_amount,
-        COUNT(*) AS num_shipments
+        COUNT(*) AS num_shipments,
+        MAX(CAST(d.[Bill to Account Number] AS varchar(100))) AS account_number
     FROM
 billing.delta_fedex_bill AS d
     WHERE

@@ -57,14 +57,16 @@ BEGIN TRY
         bill_number,
         bill_date,
         total_amount,
-        num_shipments
+        num_shipments,
+        account_number
     )
     SELECT
         @carrier_id AS carrier_id,
         d.[Invoice Number] AS bill_number,
         CONVERT(date, NULLIF(TRIM(d.[Invoice Date]), '')) AS bill_date,
         SUM(CAST(d.[Net Amount] AS decimal(18,2))) AS total_amount,
-        COUNT(DISTINCT d.[Tracking Number]) AS num_shipments
+        COUNT(DISTINCT d.[Tracking Number]) AS num_shipments,
+        MAX(d.[Account Number]) AS account_number
     FROM
         billing.delta_ups_bill AS d
     WHERE
