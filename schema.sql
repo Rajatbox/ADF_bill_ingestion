@@ -263,6 +263,95 @@ CREATE TABLE test.delta_usps_easypost_bill (
 	[carrier_account_id] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 );
 
+-- DHL DELTA TABLE
+-- Headerless CSV: 79 columns. Names follow additional_reference.md exactly.
+-- Named columns use the documented name; unnamed columns use Prop_N (N = column number).
+-- ADF Prop (0-indexed) shown in comments for ADF column mapping configuration.
+CREATE TABLE test.delta_dhl_bill (
+	Prop_1 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 1  (ADF: Prop_0)
+	account_number varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                          -- Col 2  (ADF: Prop_1):  Account Number
+	Prop_3 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 3  (ADF: Prop_2)
+	Prop_4 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 4  (ADF: Prop_3)
+	Prop_5 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 5  (ADF: Prop_4)
+	Prop_6 varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 6  (ADF: Prop_5)
+	Prop_7 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 7  (ADF: Prop_6)
+	Prop_8 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 8  (ADF: Prop_7)
+	shipping_date varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                           -- Col 9  (ADF: Prop_8):  Shipping Date
+	Prop_10 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 10 (ADF: Prop_9)
+	Prop_11 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 11 (ADF: Prop_10)
+	international_tracking_number varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,          -- Col 12 (ADF: Prop_11): Tracking Number (International Shipments)
+	domestic_tracking_number varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 13 (ADF: Prop_12): unique_id (Domestic Shipments)
+	Prop_14 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 14 (ADF: Prop_13)
+	recipient_address_line_1 varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 15 (ADF: Prop_14): Recipient Address Line 1
+	recipient_address_line_2 varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 16 (ADF: Prop_15): Recipient Address Line 2
+	recipient_city varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                         -- Col 17 (ADF: Prop_16): Recipient City
+	recipient_state_province varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                -- Col 18 (ADF: Prop_17): Recipient State/Province
+	recipient_zip_postal_code varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 19 (ADF: Prop_18): Recipient Zip/Postal Code
+	recipient_country varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                       -- Col 20 (ADF: Prop_19): Recipient Country
+	Prop_21 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 21 (ADF: Prop_20)
+	shipping_method varchar(350) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                        -- Col 22 (ADF: Prop_21): Shipping Method
+	shipped_weight varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                          -- Col 23 (ADF: Prop_22): Shipped Weight
+	shipped_weight_unit_of_measure varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,          -- Col 24 (ADF: Prop_23): Shipped Weight Unit of Measure
+	billed_weight varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                           -- Col 25 (ADF: Prop_24): Billed Weight
+	billed_weight_unit_of_measure varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,           -- Col 26 (ADF: Prop_25): Billed Weight Unit of Measure
+	Prop_27 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 27 (ADF: Prop_26)
+	Prop_28 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 28 (ADF: Prop_27)
+	[zone] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 29 (ADF: Prop_28): Zone
+	transportation_cost varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                     -- Col 30 (ADF: Prop_29): Transportation Cost
+	Prop_31 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 31 (ADF: Prop_30)
+	Prop_32 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 32 (ADF: Prop_31)
+	Prop_33 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 33 (ADF: Prop_32)
+	Prop_34 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 34 (ADF: Prop_33)
+	Prop_35 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 35 (ADF: Prop_34)
+	Prop_36 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 36 (ADF: Prop_35)
+	Prop_37 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 37 (ADF: Prop_36)
+	Prop_38 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 38 (ADF: Prop_37)
+	Prop_39 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 39 (ADF: Prop_38)
+	Prop_40 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 40 (ADF: Prop_39)
+	Prop_41 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 41 (ADF: Prop_40)
+	Prop_42 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 42 (ADF: Prop_41)
+	Prop_43 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 43 (ADF: Prop_42)
+	Prop_44 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 44 (ADF: Prop_43)
+	Prop_45 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 45 (ADF: Prop_44)
+	Prop_46 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 46 (ADF: Prop_45)
+	Prop_47 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 47 (ADF: Prop_46)
+	non_qualified_dimensional_charges varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,       -- Col 48 (ADF: Prop_47): Non-Qualified Dimensional Charges
+	Prop_49 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 49 (ADF: Prop_48)
+	Prop_50 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 50 (ADF: Prop_49)
+	Prop_51 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 51 (ADF: Prop_50)
+	Prop_52 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 52 (ADF: Prop_51)
+	Prop_53 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 53 (ADF: Prop_52)
+	Prop_54 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 54 (ADF: Prop_53)
+	Prop_55 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 55 (ADF: Prop_54)
+	Prop_56 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 56 (ADF: Prop_55)
+	Prop_57 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 57 (ADF: Prop_56)
+	Prop_58 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 58 (ADF: Prop_57)
+	Prop_59 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 59 (ADF: Prop_58)
+	Prop_60 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 60 (ADF: Prop_59)
+	Prop_61 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 61 (ADF: Prop_60)
+	Prop_62 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 62 (ADF: Prop_61)
+	Prop_63 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 63 (ADF: Prop_62)
+	Prop_64 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 64 (ADF: Prop_63)
+	fuel_surcharge_amount varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                   -- Col 65 (ADF: Prop_64): Fuel Surcharge Amount
+	Prop_66 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 66 (ADF: Prop_65)
+	overlabel_tracking_number varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,              -- Col 67 (ADF: Prop_66): Overlabel Tracking Number
+	Prop_68 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 68 (ADF: Prop_67)
+	Prop_69 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 69 (ADF: Prop_68)
+	Prop_70 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 70 (ADF: Prop_69)
+	Prop_71 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 71 (ADF: Prop_70)
+	Prop_72 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 72 (ADF: Prop_71)
+	Prop_73 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 73 (ADF: Prop_72)
+	Prop_74 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 74 (ADF: Prop_73)
+	Prop_75 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 75 (ADF: Prop_74)
+	Prop_76 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 76 (ADF: Prop_75)
+	Prop_77 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 77 (ADF: Prop_76)
+	Prop_78 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 78 (ADF: Prop_77)
+	delivery_area_surcharge_amount varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,          -- Col 79 (ADF: Prop_78): Delivery Area Surcharge Amount
+	-- ADF-appended columns from HDR row:
+	invoice_number varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	invoice_date varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
+);
+
 
 /*
 ================================================================================
@@ -476,6 +565,49 @@ ON test.ups_bill (created_date);
 -- Composite index for tracking number lookups (used in mapping queries)
 CREATE NONCLUSTERED INDEX IX_ups_bill_tracking_number_invoice
 ON test.ups_bill (tracking_number, invoice_number, invoice_date);
+
+
+
+-- DHL BILL TABLE (Normalized carrier bill line items)
+-- Column order follows the real bill (CSV) column sequence
+CREATE TABLE test.dhl_bill (
+	id int IDENTITY(1,1) NOT NULL,
+	carrier_bill_id int NULL,
+	invoice_number nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	invoice_date date NOT NULL,
+	shipping_date date NULL,                                                                       -- Col 9
+	international_tracking_number nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,         -- Col 12: as-is from CSV
+	domestic_tracking_number nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,              -- Col 13: computed '420' + zip5 + unique_id
+	recipient_zip_postal_code nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,             -- Col 19
+	recipient_country nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                      -- Col 20
+	shipping_method nvarchar(350) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                       -- Col 22
+	shipped_weight decimal(18,2) NULL,                                                             -- Col 23
+	shipped_weight_unit nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                    -- Col 24
+	billed_weight decimal(18,2) NULL,                                                              -- Col 25
+	billed_weight_unit nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                     -- Col 26
+	[zone] nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                -- Col 29
+	transportation_cost decimal(18,2) NULL,                                                        -- Col 30
+	non_qualified_dimensional_charges decimal(18,2) NULL,                                          -- Col 48
+	fuel_surcharge_amount decimal(18,2) NULL,                                                      -- Col 65
+	delivery_area_surcharge_amount decimal(18,2) NULL,                                             -- Col 79
+	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
+
+	CONSTRAINT PK_dhl_bill PRIMARY KEY (id),
+	CONSTRAINT FK_dhl_bill_carrier_bill FOREIGN KEY (carrier_bill_id) 
+		REFERENCES Test.carrier_bill(carrier_bill_id)
+);
+
+-- Index for FK lookup performance (join with carrier_bill)
+CREATE NONCLUSTERED INDEX IX_dhl_bill_carrier_bill_id
+ON test.dhl_bill (carrier_bill_id);
+
+-- Index for incremental processing (used by Insert_Unified_tables.sql)
+CREATE NONCLUSTERED INDEX IX_dhl_bill_created_date
+ON test.dhl_bill (created_date);
+
+-- Composite index for tracking number lookups
+CREATE NONCLUSTERED INDEX IX_dhl_bill_tracking
+ON test.dhl_bill (domestic_tracking_number, international_tracking_number, invoice_number);
 
 /*
 ================================================================================

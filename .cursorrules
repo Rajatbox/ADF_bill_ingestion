@@ -12,8 +12,8 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 **Instructions:** Read and follow `.agents/setup_agent.md`
 
 **Responsibilities:**
-1. Create `[carrier]_transform/` folder with 5 empty files
-2. Request CSV and stored procedure from user
+1. Create `[carrier]_transform/` folder with 6 empty files
+2. Request CSV, stored procedure, and additional reference from user
 3. STOP and wait - do NOT generate scripts
 4. Hand off to Design Agent when files are provided
 
@@ -22,6 +22,7 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 [carrier]_transform/
   ├── [carrier]_example_bill.csv           (user fills)
   ├── reference_stored_procedure.sql       (user fills)
+  ├── additional_reference.md             (user fills - optional)
   ├── Insert_ELT_&_CB.sql                  (empty)
   ├── Sync_Reference_Data.sql              (empty)
   └── Insert_Unified_tables.sql            (empty)
@@ -38,15 +39,19 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 - `DESIGN_CONSTRAINTS.md` (10 rules you MUST apply)
 - `[carrier]_example_bill.csv` (to understand structure)
 - `reference_stored_procedure.sql` (to preserve business logic)
+- `additional_reference.md` (for extra context, if populated)
 
 **Responsibilities:**
-1. Generate delta table schema (1:1 with CSV)
-2. Generate `Insert_ELT_&_CB.sql` (with transaction)
-3. Generate `Sync_Reference_Data.sql` (no transaction)
-4. Generate `Insert_Unified_tables.sql` (with unit conversions)
-5. Provide 1 validation test query
+1. Read all input files and create an implementation plan
+2. Present the plan and ask clarifying questions to the user
+3. Wait for user approval before proceeding
+4. Generate delta table schema (1:1 with CSV)
+5. Generate `Insert_ELT_&_CB.sql` (with transaction)
+6. Generate `Sync_Reference_Data.sql` (no transaction)
+7. Generate `Insert_Unified_tables.sql` (with unit conversions)
+8. Provide 1 validation test query
 
-**Output:** 3 transform scripts + 1 test query
+**Output:** Implementation plan → User approval → 3 transform scripts + 1 test query
 
 ---
 
@@ -58,12 +63,16 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 - Create README or extra documentation in carrier folder
 - Create any new files unless explicitly mentioned in system prompt or user request
 - Generate scripts before receiving CSV and stored procedure
+- Generate scripts before presenting a plan and getting user approval
 - Use `TRY_CAST` (use `CAST` for fail-fast)
 - Store cost in `shipment_attributes` table
 - Skip unit conversions (weight must be OZ, dimensions must be IN)
 - Forget `carrier_id` in NOT EXISTS checks
 
 ### ✅ ALWAYS DO THIS
+- Read all input files including `additional_reference.md` (if populated)
+- Create an implementation plan and present to user BEFORE generating scripts
+- Ask clarifying questions and wait for user approval
 - Read `DESIGN_CONSTRAINTS.md` before generating any scripts
 - Apply all 10 design constraints
 - Use transactions ONLY for `Insert_ELT_&_CB.sql`
@@ -110,15 +119,22 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 User: "I want to integrate UPS"
   ↓
 You: [Follow .agents/setup_agent.md]
-  - Create ups_transform/ with 5 empty files
-  - Ask for CSV and stored procedure
+  - Create ups_transform/ with 6 empty files
+  - Ask for CSV, stored procedure, and additional reference
   - STOP and wait
 
-User: [Provides CSV and stored procedure]
+User: [Provides CSV, stored procedure, and optional additional reference]
   ↓
-You: [Follow .agents/design_agent.md]
+You: [Follow .agents/design_agent.md - PLAN PHASE]
   - Read DESIGN_CONSTRAINTS.md
-  - Read user files
+  - Read all user files (CSV, stored proc, additional reference)
+  - Present implementation plan
+  - Ask clarifying questions
+  - STOP and wait for approval
+
+User: [Approves plan / answers questions]
+  ↓
+You: [Follow .agents/design_agent.md - GENERATION PHASE]
   - Generate delta table + 3 scripts
   - Provide validation test
 
@@ -170,5 +186,6 @@ FROM file_total, charges_total;
 2. Missing prerequisites? → Ask user, don't assume
 3. Unsure about rule? → Read DESIGN_CONSTRAINTS.md
 4. Need example? → Look at fedex_transform/
-5. Complex logic? → Preserve from reference_stored_procedure.sql
+5. Complex logic? → Preserve from reference_stored_procedure.sql and additional_reference.md
+6. Not sure about mapping? → Present plan first, ask user
 

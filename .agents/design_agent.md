@@ -12,6 +12,7 @@ Transform script designer and generator
 ## Prerequisites (from Setup Agent)
 - ✅ `[carrier]_example_bill.csv` exists and populated
 - ✅ `reference_stored_procedure.sql` exists and populated
+- ✅ `additional_reference.md` exists (optional - may contain extra context, helper queries, views, or business rules)
 
 ## Workflow
 
@@ -27,7 +28,34 @@ Transform script designer and generator
    - Note multi-piece handling (if any)
    - Note correction logic
    - Identify unit conversions
+
+3. Read additional_reference.md (if populated)
+   - Extract any supplementary business logic, views, helper queries
+   - Cross-reference with stored procedure for completeness
+   - Note any edge cases or special handling mentioned
 ```
+
+### Step 1.5: Create Plan & Ask Questions (MANDATORY)
+**Before writing any scripts, you MUST:**
+
+1. **Present an implementation plan** to the user summarizing:
+   - CSV format identified (narrow vs wide, key columns)
+   - Business logic extracted from stored procedure and additional reference
+   - Proposed delta table schema (column list with types)
+   - Proposed charge mapping strategy
+   - Unit conversion approach (weight → OZ, dimensions → IN)
+   - Any assumptions being made
+
+2. **Ask clarifying questions** about anything unclear:
+   - Ambiguous column mappings
+   - Missing business rules
+   - Charge type categorization
+   - Multi-piece / correction / void handling
+   - Any carrier-specific edge cases
+
+3. **STOP and wait for user approval** before proceeding to script generation
+   - Do NOT generate scripts until the user confirms the plan
+   - Incorporate any feedback from the user into the plan
 
 ### Step 2: Generate Delta Table
 ```sql
@@ -154,7 +182,11 @@ FROM file_total, charges_total;
 
 - [ ] Read carrier CSV
 - [ ] Read stored procedure
+- [ ] Read additional_reference.md (if populated)
 - [ ] Read DESIGN_CONSTRAINTS.md
+- [ ] Presented implementation plan to user
+- [ ] Asked clarifying questions
+- [ ] Received user approval to proceed
 - [ ] Generated delta table schema
 - [ ] Generated Insert_ELT_&_CB.sql (with transaction)
 - [ ] Generated Sync_Reference_Data.sql (no transaction)
@@ -170,11 +202,19 @@ FROM file_total, charges_total;
 - ❌ Don't forget unit conversions (OZ, IN)
 - ❌ Don't forget carrier_id in NOT EXISTS
 
+## What NOT to do (Plan Phase)
+- ❌ Don't generate scripts before presenting the plan
+- ❌ Don't skip asking clarifying questions
+- ❌ Don't proceed without user approval of the plan
+
 ## What TO do
-- ✅ Read both input files
+- ✅ Read all input files (CSV, stored procedure, additional reference)
 - ✅ Read design constraints
+- ✅ Create implementation plan and present to user FIRST
+- ✅ Ask clarifying questions before generating scripts
+- ✅ Wait for user approval before proceeding
 - ✅ Generate exactly 3 scripts
 - ✅ Apply all design rules
 - ✅ Provide exactly 1 test query
-- ✅ Preserve business logic from stored procedure
+- ✅ Preserve business logic from stored procedure and additional reference
 
