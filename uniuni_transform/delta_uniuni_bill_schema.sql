@@ -11,7 +11,7 @@ Format:  Wide format (15 charge columns)
 ================================================================================
 */
 
-CREATE TABLE test.delta_uniuni_bill (
+CREATE TABLE billing.delta_uniuni_bill (
     [Document Number] VARCHAR(255) NULL,
     [Invoice Number] VARCHAR(255) NULL,
     [Invoice Time] VARCHAR(255) NULL,

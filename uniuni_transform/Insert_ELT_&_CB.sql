@@ -21,9 +21,9 @@ Purpose: Two-step transactional data insertion process:
          2. Insert line-level billing data from delta_uniuni_bill (ELT staging)
             into uniuni_bill (Carrier Bill line items) with carrier_bill_id foreign key
 
-Source:   test.delta_uniuni_bill
-Targets:  Test.carrier_bill (invoice summaries)
-          Test.uniuni_bill (line items)
+Source:   billing.delta_uniuni_bill
+Targets:  billing.carrier_bill (invoice summaries)
+          billing.uniuni_bill (line items)
 
 Validation: Fails if invoice_time or tracking_number is NULL or empty (fail-fast CAST)
 Match:      Step 1: bill_number + bill_date + carrier_id (INSERT WHERE NOT EXISTS)
@@ -53,47 +53,31 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.carrier_bill (
+    INSERT INTO billing.carrier_bill (
         carrier_id,
         bill_number,
         bill_date,
         total_amount,
-        num_shipments
+        num_shipments,
+        account_number
     )
     SELECT
         @Carrier_id AS carrier_id,
         CAST(TRIM(d.[Invoice Number]) AS VARCHAR(100)) AS bill_number,
         CAST(TRIM(d.[Invoice Time]) AS DATE) AS bill_date,
-        SUM(
-            CAST(ISNULL(NULLIF(TRIM(d.[Base Fee]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Discount Fee]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Discount Percentage]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Signature Fee]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Pickup Fee]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Over Dimension Fee]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Over Max Size Fee]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Over-weight Fee]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Fuel Surcharge]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Peak Season Surcharge]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Delivery Area Surcharge]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Delivery Area Surcharge Extend]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Truck Fee]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Relabel Fee]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Miscellaneous Fee]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Credit Card Surcharge]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Credit]), ''), '0') AS DECIMAL(18,2)) +
-            CAST(ISNULL(NULLIF(TRIM(d.[Approved Claim]), ''), '0') AS DECIMAL(18,2))
-        ) AS total_amount,
-        COUNT(d.[Tracking Number]) AS num_shipments
+        SUM(CAST(ISNULL(NULLIF(TRIM(d.[Total Billed Amount]), ''), '0') AS DECIMAL(18,2))) AS total_amount,
+        COUNT(d.[Tracking Number]) AS num_shipments,
+        CAST(TRIM(d.[Merchant ID]) AS VARCHAR(100)) AS account_number
     FROM
-        test.delta_uniuni_bill AS d
+        billing.delta_uniuni_bill AS d
     GROUP BY
         d.[Invoice Number], 
-        CAST(TRIM(d.[Invoice Time]) AS DATE)
+        CAST(TRIM(d.[Invoice Time]) AS DATE),
+        d.[Merchant ID]
     HAVING
         NOT EXISTS (
             SELECT 1
-            FROM Test.carrier_bill AS cb
+            FROM billing.carrier_bill AS cb
             WHERE cb.bill_number = CAST(TRIM(d.[Invoice Number]) AS VARCHAR(100))
                 AND cb.bill_date = CAST(TRIM(d.[Invoice Time]) AS DATE)
                 AND cb.carrier_id = @Carrier_id
@@ -111,7 +95,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.uniuni_bill (
+    INSERT INTO billing.uniuni_bill (
         invoice_time,
         invoice_number,
         tracking_number,
@@ -134,7 +118,7 @@ BEGIN TRY
         induction_time,
         base_fee,
         discount_fee,
-        discount_percentage,
+        billed_fee,
         signature_fee,
         pickup_fee,
         over_dimension_fee,
@@ -174,7 +158,7 @@ BEGIN TRY
         CAST(NULLIF(TRIM(d.[Induction Time]), '') AS DATE) AS induction_time,
         CAST(ISNULL(NULLIF(TRIM(d.[Base Fee]), ''), '0') AS DECIMAL(10,2)) AS base_fee,
         CAST(ISNULL(NULLIF(TRIM(d.[Discount Fee]), ''), '0') AS DECIMAL(10,2)) AS discount_fee,
-        CAST(ISNULL(NULLIF(TRIM(d.[Discount Percentage]), ''), '0') AS DECIMAL(10,2)) AS discount_percentage,
+        CAST(ISNULL(NULLIF(TRIM(d.[Billed Fee]), ''), '0') AS DECIMAL(10,2)) AS billed_fee,
         CAST(ISNULL(NULLIF(TRIM(d.[Signature Fee]), ''), '0') AS DECIMAL(10,2)) AS signature_fee,
         CAST(ISNULL(NULLIF(TRIM(d.[Pickup Fee]), ''), '0') AS DECIMAL(10,2)) AS pickup_fee,
         CAST(ISNULL(NULLIF(TRIM(d.[Over Dimension Fee]), ''), '0') AS DECIMAL(10,2)) AS over_dimension_fee,
@@ -191,15 +175,15 @@ BEGIN TRY
         CAST(ISNULL(NULLIF(TRIM(d.[Credit]), ''), '0') AS DECIMAL(10,2)) AS credit,
         CAST(ISNULL(NULLIF(TRIM(d.[Approved Claim]), ''), '0') AS DECIMAL(10,2)) AS approved_claim
     FROM
-        test.delta_uniuni_bill AS d
-    INNER JOIN Test.carrier_bill AS cb
+        billing.delta_uniuni_bill AS d
+    INNER JOIN billing.carrier_bill AS cb
         ON cb.bill_number = CAST(TRIM(d.[Invoice Number]) AS VARCHAR(100))
         AND cb.bill_date = CAST(TRIM(d.[Invoice Time]) AS DATE)
         AND cb.carrier_id = @Carrier_id
     WHERE
         NOT EXISTS (
             SELECT 1
-            FROM Test.uniuni_bill AS ub
+            FROM billing.uniuni_bill AS ub
             WHERE ub.carrier_bill_id = cb.carrier_bill_id  -- Single field check per Design Constraint #9
         );
 

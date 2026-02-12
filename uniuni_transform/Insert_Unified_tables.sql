@@ -24,12 +24,12 @@ Purpose: Transform carrier-specific data into unified analytical schema:
             - Dimensions: CM × 0.393701 → IN, IN → IN (no conversion)
          2. Unpivot 18 charge columns and insert into shipment_charges
 
-Source:   Test.uniuni_bill (carrier-specific line items)
-Targets:  Test.shipment_attributes (unified physical data - NO cost stored)
-          Test.shipment_charges (unified charge data)
-Joins:    test.charge_types (charge_type_id lookup)
-          Test.carrier_bill (carrier_bill_id lookup)
-View:     Test.vw_shipment_summary (calculated billed_shipping_cost on-the-fly)
+Source:   billing.uniuni_bill (carrier-specific line items)
+Targets:  billing.shipment_attributes (unified physical data - NO cost stored)
+          billing.shipment_charges (unified charge data)
+Joins:    dbo.charge_types (charge_type_id lookup)
+          billing.carrier_bill (carrier_bill_id lookup)
+View:     billing.vw_shipment_summary (calculated billed_shipping_cost on-the-fly)
 
 Idempotency: - Part 1: NOT EXISTS check + UNIQUE constraint on (carrier_id, tracking_number)
              - Part 2: NOT EXISTS check on (shipment_attribute_id, carrier_bill_id, charge_type_id)
@@ -63,7 +63,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.shipment_attributes (
+    INSERT INTO billing.shipment_attributes (
         carrier_id,
         tracking_number,
         shipment_date,
@@ -112,12 +112,12 @@ BEGIN TRY
         END AS billed_height_in
         
     FROM
-        Test.uniuni_bill AS ub
+        billing.uniuni_bill AS ub
     WHERE
         ub.created_date > @lastrun    -- Incremental filter: only new records
         AND NOT EXISTS (
             SELECT 1
-            FROM Test.shipment_attributes AS sa
+            FROM billing.shipment_attributes AS sa
             WHERE sa.carrier_id = @Carrier_id
                 AND sa.tracking_number = ub.tracking_number
         );
@@ -144,7 +144,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.shipment_charges (
+    INSERT INTO billing.shipment_charges (
         carrier_id,
         carrier_bill_id,
         tracking_number,
@@ -160,14 +160,14 @@ BEGIN TRY
         charges.amount,
         sa.id AS shipment_attribute_id
     FROM
-        Test.uniuni_bill AS ub
+        billing.uniuni_bill AS ub
         
         -- Unpivot charge columns using CROSS APPLY
         CROSS APPLY (
             VALUES 
                 ('Base Rate', ub.base_fee),
                 ('Discount Fee', ub.discount_fee),
-                ('Discount Percentage', ub.discount_percentage),
+                ('Billed Fee', ub.billed_fee),
                 ('Signature Fee', ub.signature_fee),
                 ('Pick Up Fee', ub.pickup_fee),
                 ('Over Dimension Fee', ub.over_dimension_fee),
@@ -186,26 +186,25 @@ BEGIN TRY
         ) AS charges(charge_name, amount)
         
         -- Join to get charge_type_id
-        INNER JOIN test.charge_types AS ct 
+        INNER JOIN dbo.charge_types AS ct 
             ON ct.charge_name = charges.charge_name 
             AND ct.carrier_id = @Carrier_id
         
         -- Join to get carrier_bill_id
-        INNER JOIN Test.carrier_bill AS cb
+        INNER JOIN billing.carrier_bill AS cb
             ON cb.bill_number = CAST(ub.invoice_number AS VARCHAR(100))
             AND cb.bill_date = ub.invoice_time
             AND cb.carrier_id = @Carrier_id
         
         -- Join to get shipment_attribute_id
-        INNER JOIN Test.shipment_attributes AS sa
+        INNER JOIN billing.shipment_attributes AS sa
             ON sa.tracking_number = ub.tracking_number
             AND sa.carrier_id = @Carrier_id
     WHERE
-        ub.created_date > @lastrun    -- Incremental filter: only new records
-        AND charges.amount > 0        -- Only insert non-zero charges
+        ub.created_date > @lastrun    -- Incremental filter: only new records      -- amount can be negative 
         AND NOT EXISTS (
             SELECT 1
-            FROM Test.shipment_charges AS sc
+            FROM billing.shipment_charges AS sc
             WHERE sc.shipment_attribute_id = sa.id
                 AND sc.carrier_bill_id = cb.carrier_bill_id
                 AND sc.charge_type_id = ct.charge_type_id

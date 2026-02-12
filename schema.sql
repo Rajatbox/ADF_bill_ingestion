@@ -437,7 +437,7 @@ CREATE TABLE Test.uniuni_bill (
 	induction_time date NULL,
 	base_fee decimal(10,2) NOT NULL,
 	discount_fee decimal(10,2) NULL,
-	discount_percentage decimal(10,2) NULL,
+	billed_fee decimal(10,2) NULL,
 	signature_fee decimal(10,2) NULL,
 	pickup_fee decimal(10,2) NULL,
 	over_dimension_fee decimal(10,2) NULL,
@@ -759,3 +759,20 @@ INCLUDE (is_matched, is_processed, amount, variance_amount);
 -- Index for shipment attribute FK lookup performance
 CREATE NONCLUSTERED INDEX IX_carrier_cost_ledger_shipment_attribute_id
 ON Test.carrier_cost_ledger (shipment_attribute_id);
+
+----------------------------------------------------------------------------------------------------------------- 
+-- Carrier Bill Table 
+
+CREATE TABLE billing.carrier_bill ( 
+    carrier_bill_id int IDENTITY(1,1) NOT NULL,
+    bill_id int NULL,
+    carrier_id int NULL,
+    bill_date date NULL,
+    total_amount decimal(18,2) NULL,
+    num_shipments int NULL,
+    reconciled_amount decimal(18,2) NULL,
+    discrepancy_amount decimal(18,2) NULL,
+    bill_number varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    account_number varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    CONSTRAINT PK__carrier___A6B346871A6B3E58 PRIMARY KEY (carrier_bill_id)
+);
