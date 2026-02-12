@@ -13,7 +13,7 @@ Delta Tables
 ================================================================================
 */
 
-CREATE TABLE test.delta_fedex_bill ( -- rename to delta_fedex_bill
+CREATE TABLE billing.delta_fedex_bill ( -- rename to delta_fedex_bill
 	[Consolidated Account Number] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Bill to Account Number] int NULL,
 	[Invoice Date] int NULL,
@@ -227,7 +227,7 @@ CREATE TABLE test.delta_fedex_bill ( -- rename to delta_fedex_bill
 );
 
 -- USPS EASYPOST DELTA TABLE
-CREATE TABLE test.delta_usps_easypost_bill (
+CREATE TABLE billing.delta_usps_easypost_bill (
 	[created_at] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[id] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[tracking_code] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -263,11 +263,259 @@ CREATE TABLE test.delta_usps_easypost_bill (
 	[carrier_account_id] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 );
 
+-- UPS DELTA TABLE
+CREATE TABLE billing.delta_ups_bill (
+    [Version] VARCHAR(50) NULL,
+    [Recipient Number] VARCHAR(50) NULL,
+    [Account Number] VARCHAR(50) NULL,
+    [Account Country] VARCHAR(50) NULL,
+    [Invoice Date] VARCHAR(50) NULL,
+    [Invoice Number] VARCHAR(50) NULL,
+    [Invoice Type Code] VARCHAR(50) NULL,
+    [Invoice Type Detail Code] VARCHAR(50) NULL,
+    [Account Tax ID] VARCHAR(50) NULL,
+    [Invoice Currency Code] VARCHAR(50) NULL,
+    [Invoice Amount] VARCHAR(50) NULL,
+    [Transaction Date] VARCHAR(50) NULL,
+    [Pickup Record Number] VARCHAR(50) NULL,
+    [Lead Shipment Number] VARCHAR(50) NULL,
+    [World Ease Number] VARCHAR(50) NULL,
+    [Shipment Reference Number 1] VARCHAR(500) NULL,
+    [Shipment Reference Number 2] VARCHAR(500) NULL,
+    [Bill Option Code] VARCHAR(50) NULL,
+    [Package Quantity] VARCHAR(50) NULL,
+    [Oversize Quantity] VARCHAR(50) NULL,
+    [Tracking Number] VARCHAR(255) NULL,
+    [Package Reference Number 1] VARCHAR(500) NULL,
+    [Package Reference Number 2] VARCHAR(500) NULL,
+    [Package Reference Number 3] VARCHAR(500) NULL,
+    [Package Reference Number 4] VARCHAR(500) NULL,
+    [Package Reference Number 5] VARCHAR(500) NULL,
+    [Entered Weight] VARCHAR(50) NULL,
+    [Entered Weight Unit of Measure] VARCHAR(50) NULL,
+    [Billed Weight] VARCHAR(50) NULL,
+    [Billed Weight Unit of Measure] VARCHAR(50) NULL,
+    [Container Type] VARCHAR(50) NULL,
+    [Billed Weight Type] VARCHAR(50) NULL,
+    [Package Dimensions] VARCHAR(100) NULL,
+    [Zone] VARCHAR(50) NULL,
+    [Charge Category Code] VARCHAR(50) NULL,
+    [Charge Category Detail Code] VARCHAR(50) NULL,
+    [Charge Source] VARCHAR(50) NULL,
+    [Type Code 1] VARCHAR(50) NULL,
+    [Type Detail Code 1] VARCHAR(50) NULL,
+    [Type Detail Value 1] VARCHAR(50) NULL,
+    [Type Code 2] VARCHAR(50) NULL,
+    [Type Detail Code 2] VARCHAR(50) NULL,
+    [Type Detail Value 2] VARCHAR(50) NULL,
+    [Charge Classification Code] VARCHAR(50) NULL,
+    [Charge Description Code] VARCHAR(50) NULL,
+    [Charge Description] VARCHAR(255) NULL,
+    [Charged Unit Quantity] VARCHAR(50) NULL,
+    [Basis Currency Code] VARCHAR(50) NULL,
+    [Basis Value] VARCHAR(50) NULL,
+    [Tax Indicator] VARCHAR(50) NULL,
+    [Transaction Currency Code] VARCHAR(50) NULL,
+    [Incentive Amount] VARCHAR(50) NULL,
+    [Net Amount] VARCHAR(50) NULL,
+    [Miscellaneous Currency Code] VARCHAR(50) NULL,
+    [Miscellaneous Incentive Amount] VARCHAR(50) NULL,
+    [Miscellaneous Net Amount] VARCHAR(50) NULL,
+    [Alternate Invoicing Currency Code] VARCHAR(50) NULL,
+    [Alternate Invoice Amount] VARCHAR(50) NULL,
+    [Invoice Exchange Rate] VARCHAR(50) NULL,
+    [Tax Variance Amount] VARCHAR(50) NULL,
+    [Currency Variance Amount] VARCHAR(50) NULL,
+    [Invoice Level Charge] VARCHAR(50) NULL,
+    [Invoice Due Date] VARCHAR(50) NULL,
+    [Alternate Invoice Number] VARCHAR(50) NULL,
+    [Store Number] VARCHAR(50) NULL,
+    [Customer Reference Number] VARCHAR(500) NULL,
+    [Sender Name] VARCHAR(255) NULL,
+    [Sender Company Name] VARCHAR(255) NULL,
+    [Sender Address Line 1] VARCHAR(255) NULL,
+    [Sender Address Line 2] VARCHAR(255) NULL,
+    [Sender City] VARCHAR(100) NULL,
+    [Sender State] VARCHAR(50) NULL,
+    [Sender Postal] VARCHAR(100) NULL,
+    [Sender Country] VARCHAR(50) NULL,
+    [Receiver Name] VARCHAR(255) NULL,
+    [Receiver Company Name] VARCHAR(255) NULL,
+    [Receiver Address Line 1] VARCHAR(255) NULL,
+    [Receiver Address Line 2] VARCHAR(255) NULL,
+    [Receiver City] VARCHAR(100) NULL,
+    [Receiver State] VARCHAR(50) NULL,
+    [Receiver Postal] VARCHAR(100) NULL,
+    [Receiver Country] VARCHAR(50) NULL,
+    [Third Party Name] VARCHAR(255) NULL,
+    [Third Party Company Name] VARCHAR(255) NULL,
+    [Third Party Address Line 1] VARCHAR(255) NULL,
+    [Third Party Address Line 2] VARCHAR(255) NULL,
+    [Third Party City] VARCHAR(100) NULL,
+    [Third Party State] VARCHAR(50) NULL,
+    [Third Party Postal] VARCHAR(100) NULL,
+    [Third Party Country] VARCHAR(50) NULL,
+    [Sold To Name] VARCHAR(255) NULL,
+    [Sold To Company Name] VARCHAR(255) NULL,
+    [Sold To Address Line 1] VARCHAR(255) NULL,
+    [Sold To Address Line 2] VARCHAR(255) NULL,
+    [Sold To City] VARCHAR(100) NULL,
+    [Sold To State] VARCHAR(50) NULL,
+    [Sold To Postal] VARCHAR(100) NULL,
+    [Sold To Country] VARCHAR(50) NULL,
+    [Miscellaneous Address Qual 1] VARCHAR(50) NULL,
+    [Miscellaneous Address 1 Name] VARCHAR(255) NULL,
+    [Miscellaneous Address 1 Company Name] VARCHAR(255) NULL,
+    [Miscellaneous Address 1 Address Line 1] VARCHAR(255) NULL,
+    [Miscellaneous Address 1 Address Line 2] VARCHAR(255) NULL,
+    [Miscellaneous Address 1 City] VARCHAR(100) NULL,
+    [Miscellaneous Address 1 State] VARCHAR(50) NULL,
+    [Miscellaneous Address 1 Postal] VARCHAR(100) NULL,
+    [Miscellaneous Address 1 Country] VARCHAR(50) NULL,
+    [Miscellaneous Address Qual 2] VARCHAR(50) NULL,
+    [Miscellaneous Address 2 Name] VARCHAR(255) NULL,
+    [Miscellaneous Address 2 Company Name] VARCHAR(255) NULL,
+    [Miscellaneous Address 2 Address Line 1] VARCHAR(255) NULL,
+    [Miscellaneous Address 2 Address Line 2] VARCHAR(255) NULL,
+    [Miscellaneous Address 2 City] VARCHAR(100) NULL,
+    [Miscellaneous Address 2 State] VARCHAR(50) NULL,
+    [Miscellaneous Address 2 Postal] VARCHAR(100) NULL,
+    [Miscellaneous Address 2 Country] VARCHAR(50) NULL,
+    [Shipment Date] VARCHAR(50) NULL,
+    [Shipment Export Date] VARCHAR(50) NULL,
+    [Shipment Import Date] VARCHAR(50) NULL,
+    [Entry Date] VARCHAR(50) NULL,
+    [Direct Shipment Date] VARCHAR(50) NULL,
+    [Shipment Delivery Date] VARCHAR(50) NULL,
+    [Shipment Release Date] VARCHAR(50) NULL,
+    [Cycle Date] VARCHAR(50) NULL,
+    [EFT Date] VARCHAR(50) NULL,
+    [Validation Date] VARCHAR(50) NULL,
+    [Entry Port] VARCHAR(100) NULL,
+    [Entry Number] VARCHAR(100) NULL,
+    [Export Place] VARCHAR(100) NULL,
+    [Shipment Value Amount] VARCHAR(50) NULL,
+    [Shipment Description] VARCHAR(500) NULL,
+    [Entered Currency Code] VARCHAR(50) NULL,
+    [Customs Number] VARCHAR(100) NULL,
+    [Exchange Rate] VARCHAR(50) NULL,
+    [Master Air Waybill Number] VARCHAR(100) NULL,
+    [EPU] VARCHAR(100) NULL,
+    [Entry Type] VARCHAR(50) NULL,
+    [CPC Code] VARCHAR(50) NULL,
+    [Line Item Number] VARCHAR(50) NULL,
+    [Goods Description] VARCHAR(500) NULL,
+    [Entered Value] VARCHAR(50) NULL,
+    [Duty Amount] VARCHAR(50) NULL,
+    [Weight] VARCHAR(50) NULL,
+    [Unit of Measure] VARCHAR(50) NULL,
+    [Item Quantity] VARCHAR(50) NULL,
+    [Item Quantity Unit of Measure] VARCHAR(50) NULL,
+    [Import Tax ID] VARCHAR(100) NULL,
+    [Declaration Number] VARCHAR(100) NULL,
+    [Carrier Name] VARCHAR(255) NULL,
+    [CCCD Number] VARCHAR(100) NULL,
+    [Cycle Number] VARCHAR(100) NULL,
+    [Foreign Trade Reference Number] VARCHAR(100) NULL,
+    [Job Number] VARCHAR(100) NULL,
+    [Transport Mode] VARCHAR(50) NULL,
+    [Tax Type] VARCHAR(50) NULL,
+    [Tariff Code] VARCHAR(100) NULL,
+    [Tariff Rate] VARCHAR(50) NULL,
+    [Tariff Treatment Number] VARCHAR(100) NULL,
+    [Contact Name] VARCHAR(255) NULL,
+    [Class Number] VARCHAR(50) NULL,
+    [Document Type] VARCHAR(50) NULL,
+    [Office Number] VARCHAR(100) NULL,
+    [Document Number] VARCHAR(100) NULL,
+    [Duty Value] VARCHAR(50) NULL,
+    [Total Value for Duty] VARCHAR(50) NULL,
+    [Excise Tax Amount] VARCHAR(50) NULL,
+    [Excise Tax Rate] VARCHAR(50) NULL,
+    [GST Amount] VARCHAR(50) NULL,
+    [GST Rate] VARCHAR(50) NULL,
+    [Order In Council] VARCHAR(100) NULL,
+    [Origin Country] VARCHAR(50) NULL,
+    [SIMA Access] VARCHAR(50) NULL,
+    [Tax Value] VARCHAR(50) NULL,
+    [Total Customs Amount] VARCHAR(50) NULL,
+    [Miscellaneous Line 1] VARCHAR(500) NULL,
+    [Miscellaneous Line 2] VARCHAR(500) NULL,
+    [Miscellaneous Line 3] VARCHAR(500) NULL,
+    [Miscellaneous Line 4] VARCHAR(500) NULL,
+    [Miscellaneous Line 5] VARCHAR(500) NULL,
+    [Payor Role Code] VARCHAR(50) NULL,
+    [Miscellaneous Line 7] VARCHAR(500) NULL,
+    [Miscellaneous Line 8] VARCHAR(500) NULL,
+    [Miscellaneous Line 9] VARCHAR(500) NULL,
+    [Miscellaneous Line 10] VARCHAR(500) NULL,
+    [Miscellaneous Line 11] VARCHAR(500) NULL,
+    [Duty Rate] VARCHAR(50) NULL,
+    [VAT Basis Amount] VARCHAR(50) NULL,
+    [VAT Amount] VARCHAR(50) NULL,
+    [VAT Rate] VARCHAR(50) NULL,
+    [Other Basis Amount] VARCHAR(50) NULL,
+    [Other Amount] VARCHAR(50) NULL,
+    [Other Rate] VARCHAR(50) NULL,
+    [Other Customs Number Indicator] VARCHAR(50) NULL,
+    [Other Customs Number] VARCHAR(100) NULL,
+    [Customs Office Name] VARCHAR(255) NULL,
+    [Package Dimension Unit Of Measure] VARCHAR(50) NULL,
+    [Original Shipment Package Quantity] VARCHAR(50) NULL,
+    [Place Holder 24] VARCHAR(50) NULL,
+    [Place Holder 25] VARCHAR(50) NULL,
+    [Place Holder 26] VARCHAR(50) NULL,
+    [Place Holder 27] VARCHAR(50) NULL,
+    [Place Holder 28] VARCHAR(50) NULL,
+    [Place Holder 29] VARCHAR(50) NULL,
+    [Place Holder 30] VARCHAR(50) NULL,
+    [Place Holder 31] VARCHAR(50) NULL,
+    [BOL # 1] VARCHAR(100) NULL,
+    [BOL # 2] VARCHAR(100) NULL,
+    [BOL # 3] VARCHAR(100) NULL,
+    [BOL # 4] VARCHAR(100) NULL,
+    [BOL # 5] VARCHAR(100) NULL,
+    [PO # 1] VARCHAR(100) NULL,
+    [PO # 2] VARCHAR(100) NULL,
+    [PO # 3] VARCHAR(100) NULL,
+    [PO # 4] VARCHAR(100) NULL,
+    [PO # 5] VARCHAR(100) NULL,
+    [PO # 6] VARCHAR(100) NULL,
+    [PO # 7] VARCHAR(100) NULL,
+    [PO # 8] VARCHAR(100) NULL,
+    [PO # 9] VARCHAR(100) NULL,
+    [PO # 10] VARCHAR(100) NULL,
+    [NMFC] VARCHAR(100) NULL,
+    [Detail Class] VARCHAR(50) NULL,
+    [Freight Sequence Number] VARCHAR(50) NULL,
+    [Declared Freight Class] VARCHAR(50) NULL,
+    [Place Holder 34] VARCHAR(50) NULL,
+    [Place Holder 35] VARCHAR(50) NULL,
+    [Place Holder 36] VARCHAR(50) NULL,
+    [Place Holder 37] VARCHAR(50) NULL,
+    [Place Holder 38] VARCHAR(50) NULL,
+    [Place Holder 39] VARCHAR(50) NULL,
+    [Place Holder 40] VARCHAR(50) NULL,
+    [Place Holder 41] VARCHAR(50) NULL,
+    [Place Holder 42] VARCHAR(50) NULL,
+    [Place Holder 43] VARCHAR(50) NULL,
+    [Place Holder 44] VARCHAR(50) NULL,
+    [Place Holder 45] VARCHAR(50) NULL,
+    [Place Holder 46] VARCHAR(50) NULL,
+    [Place Holder 47] VARCHAR(50) NULL,
+    [Place Holder 48] VARCHAR(50) NULL,
+    [Place Holder 49] VARCHAR(50) NULL,
+    [Place Holder 50] VARCHAR(50) NULL,
+    [Place Holder 51] VARCHAR(50) NULL,
+    [Place Holder 52] VARCHAR(50) NULL,
+    [Place Holder 53] VARCHAR(50) NULL
+);
+
 -- DHL DELTA TABLE
 -- Headerless CSV: 79 columns. Names follow additional_reference.md exactly.
 -- Named columns use the documented name; unnamed columns use Prop_N (N = column number).
 -- ADF Prop (0-indexed) shown in comments for ADF column mapping configuration.
-CREATE TABLE test.delta_dhl_bill (
+CREATE TABLE billing.delta_dhl_bill (
 	Prop_1 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 1  (ADF: Prop_0)
 	account_number varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                          -- Col 2  (ADF: Prop_1):  Account Number
 	Prop_3 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 3  (ADF: Prop_2)
@@ -361,7 +609,7 @@ Normalized Carrier Tables
 
 --FEDEX BILL TABLE
 
-CREATE TABLE test.fedex_bill (
+CREATE TABLE billing.fedex_bill (
 	id int IDENTITY(1,1) NOT NULL,
 	invoice_number nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	invoice_date date NOT NULL,
@@ -486,23 +734,23 @@ CREATE TABLE test.fedex_bill (
 	
 	CONSTRAINT PK_fedex_carrier_bill_id PRIMARY KEY (id),
 	CONSTRAINT FK_fedex_bill_carrier_bill FOREIGN KEY (carrier_bill_id) 
-		REFERENCES Test.carrier_bill(carrier_bill_id)
+		REFERENCES billing.carrier_bill(carrier_bill_id)
 );
 
 -- Index for FK lookup performance (join with carrier_bill)
 CREATE NONCLUSTERED INDEX IX_fedex_bill_carrier_bill_id
-ON Test.fedex_bill (carrier_bill_id);
+ON billing.fedex_bill (carrier_bill_id);
 
 -- Index for incremental processing (used by Insert_Unified_tables.sql)
 CREATE NONCLUSTERED INDEX IX_fedex_bill_created_date
-ON Test.fedex_bill (created_date);
+ON billing.fedex_bill (created_date);
 
 -- Composite index for tracking number lookups (used in mapping queries)
 CREATE NONCLUSTERED INDEX IX_fedex_bill_tracking_number_invoice
-ON Test.fedex_bill (express_or_ground_tracking_id, invoice_number, invoice_date);
+ON billing.fedex_bill (express_or_ground_tracking_id, invoice_number, invoice_date);
 
 -- USPS EASYPOST BILL TABLE
-CREATE TABLE test.usps_easy_post_bill (
+CREATE TABLE billing.usps_easy_post_bill (
 	id bigint IDENTITY(1,1) NOT NULL,
 	tracking_code varchar(40) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	invoice_number varchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -527,7 +775,7 @@ CREATE TABLE test.usps_easy_post_bill (
 
 --UPS BILL TABLE
 
-CREATE TABLE test.ups_bill (
+CREATE TABLE billing.ups_bill (
 	id int IDENTITY(1,1) NOT NULL,
 	invoice_number nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	invoice_date date NOT NULL,
@@ -551,26 +799,26 @@ CREATE TABLE test.ups_bill (
 	
 	CONSTRAINT PK_ups_carrier_bill_id PRIMARY KEY (id),
 	CONSTRAINT FK_ups_bill_carrier_bill FOREIGN KEY (carrier_bill_id) 
-		REFERENCES Test.carrier_bill(carrier_bill_id)
+		REFERENCES billing.carrier_bill(carrier_bill_id)
 );
 
 -- Index for FK lookup performance (join with carrier_bill)
 CREATE NONCLUSTERED INDEX IX_ups_bill_carrier_bill_id
-ON test.ups_bill (carrier_bill_id);
+ON billing.ups_bill (carrier_bill_id);
 
 -- Index for incremental processing (used by Insert_Unified_tables.sql)
 CREATE NONCLUSTERED INDEX IX_ups_bill_created_date
-ON test.ups_bill (created_date);
+ON billing.ups_bill (created_date);
 
 -- Composite index for tracking number lookups (used in mapping queries)
 CREATE NONCLUSTERED INDEX IX_ups_bill_tracking_number_invoice
-ON test.ups_bill (tracking_number, invoice_number, invoice_date);
+ON billing.ups_bill (tracking_number, invoice_number, invoice_date);
 
 
 
 -- DHL BILL TABLE (Normalized carrier bill line items)
 -- Column order follows the real bill (CSV) column sequence
-CREATE TABLE test.dhl_bill (
+CREATE TABLE billing.dhl_bill (
 	id int IDENTITY(1,1) NOT NULL,
 	carrier_bill_id int NULL,
 	invoice_number nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -594,27 +842,27 @@ CREATE TABLE test.dhl_bill (
 
 	CONSTRAINT PK_dhl_bill PRIMARY KEY (id),
 	CONSTRAINT FK_dhl_bill_carrier_bill FOREIGN KEY (carrier_bill_id) 
-		REFERENCES Test.carrier_bill(carrier_bill_id)
+		REFERENCES billing.carrier_bill(carrier_bill_id)
 );
 
 -- Index for FK lookup performance (join with carrier_bill)
 CREATE NONCLUSTERED INDEX IX_dhl_bill_carrier_bill_id
-ON test.dhl_bill (carrier_bill_id);
+ON billing.dhl_bill (carrier_bill_id);
 
 -- Index for incremental processing (used by Insert_Unified_tables.sql)
 CREATE NONCLUSTERED INDEX IX_dhl_bill_created_date
-ON test.dhl_bill (created_date);
+ON billing.dhl_bill (created_date);
 
 -- Composite index for tracking number lookups
 CREATE NONCLUSTERED INDEX IX_dhl_bill_tracking
-ON test.dhl_bill (domestic_tracking_number, international_tracking_number, invoice_number);
+ON billing.dhl_bill (domestic_tracking_number, international_tracking_number, invoice_number);
 
 /*
 ================================================================================
 GOLD LAYER TABLES
 ================================================================================
 */
-CREATE TABLE Test.carrier_bill ( -- rename to carrier_bill
+CREATE TABLE billing.carrier_bill ( -- rename to carrier_bill
 	carrier_bill_id int IDENTITY(1,1) NOT NULL,
 	bill_id int NULL,
 	carrier_id int NULL,
@@ -629,16 +877,16 @@ CREATE TABLE Test.carrier_bill ( -- rename to carrier_bill
 
 -- Unique constraint: Prevent duplicate invoices per carrier
 CREATE UNIQUE NONCLUSTERED INDEX UQ_carrier_bill_number_date_carrier
-ON Test.carrier_bill (bill_number, bill_date, carrier_id)
+ON billing.carrier_bill (bill_number, bill_date, carrier_id)
 WHERE carrier_id IS NOT NULL AND bill_date IS NOT NULL;
 
 -- Index for carrier-based queries
 CREATE NONCLUSTERED INDEX IX_carrier_bill_carrier_id
-ON Test.carrier_bill (carrier_id, bill_date);
+ON billing.carrier_bill (carrier_id, bill_date);
 
 -----------------------------------------------------------------------------------------------------------------
 
-CREATE TABLE test.shipping_method (
+CREATE TABLE dbo.shipping_method (
 	shipping_method_id int IDENTITY(1,1) NOT NULL,
 	carrier_id int NOT NULL,
 	method_name varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -652,15 +900,15 @@ CREATE TABLE test.shipping_method (
 
 -- Unique constraint: Prevent duplicate shipping methods per carrier
 CREATE UNIQUE NONCLUSTERED INDEX UQ_shipping_method_carrier_name
-ON test.shipping_method (carrier_id, method_name);
+ON dbo.shipping_method (carrier_id, method_name);
 
 -- Index for carrier-based lookups
 CREATE NONCLUSTERED INDEX IX_shipping_method_carrier_active
-ON test.shipping_method (carrier_id, is_active);
+ON dbo.shipping_method (carrier_id, is_active);
 
 -----------------------------------------------------------------------------------------------------------------
 
-CREATE TABLE test.charge_types (
+CREATE TABLE dbo.charge_types (
 	charge_type_id int IDENTITY(1,1) NOT NULL,
 	carrier_id int NOT NULL,
 	charge_name varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -674,15 +922,15 @@ CREATE TABLE test.charge_types (
 
 -- Unique constraint: Prevent duplicate charge types per carrier
 CREATE UNIQUE NONCLUSTERED INDEX UQ_charge_types_carrier_name
-ON test.charge_types (carrier_id, charge_name);
+ON dbo.charge_types (carrier_id, charge_name);
 
 -- Index for category-based queries
 CREATE NONCLUSTERED INDEX IX_charge_types_carrier_category
-ON test.charge_types (carrier_id, charge_category_id);
+ON dbo.charge_types (carrier_id, charge_category_id);
 
 -----------------------------------------------------------------------------------------------------------------
 
-CREATE TABLE Test.shipment_charges (
+CREATE TABLE billing.shipment_charges (
 	id int IDENTITY(1,1) NOT NULL,
 	carrier_id int NOT NULL,
 	carrier_bill_id int NOT NULL,
@@ -693,26 +941,26 @@ CREATE TABLE Test.shipment_charges (
 	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
 	CONSTRAINT PK__shipment__charges PRIMARY KEY (id),
 	CONSTRAINT FK_shipment_charges_attributes FOREIGN KEY (shipment_attribute_id) 
-		REFERENCES Test.shipment_attributes(id)
+		REFERENCES billing.shipment_attributes(id)
 );
 
 -- Index for FK lookup performance
 CREATE NONCLUSTERED INDEX IX_shipment_charges_attribute_id
-ON Test.shipment_charges (shipment_attribute_id);
+ON billing.shipment_charges (shipment_attribute_id);
 
 -- Unique constraint: Prevent duplicate charges for same shipment/carrier_bill/charge_type
 CREATE UNIQUE NONCLUSTERED INDEX UQ_shipment_charges_bill_tracking_charge
-ON Test.shipment_charges (carrier_bill_id, tracking_number, charge_type_id);
+ON billing.shipment_charges (carrier_bill_id, tracking_number, charge_type_id);
 
 -- Index for carrier-based queries
 CREATE NONCLUSTERED INDEX IX_shipment_charges_carrier_date
-ON Test.shipment_charges (carrier_id, created_date);
+ON billing.shipment_charges (carrier_id, created_date);
 
 
 -----------------------------------------------------------------------------------------------------------------
 
 
-CREATE TABLE Test.shipment_attributes (
+CREATE TABLE billing.shipment_attributes (
 	id int IDENTITY(1,1) NOT NULL,
 	carrier_id int NOT NULL,
 	shipment_date datetime NULL,
@@ -730,46 +978,12 @@ CREATE TABLE Test.shipment_attributes (
 
 -- Enforce business key uniqueness to prevent duplicate tracking numbers
 CREATE UNIQUE NONCLUSTERED INDEX UQ_shipment_attributes_business_key 
-ON Test.shipment_attributes (carrier_id, tracking_number);
-
-
------------------------------------------------------------------------------------------------------------------
--- View: Shipment Summary with Calculated Cost
------------------------------------------------------------------------------------------------------------------
--- Purpose: Provides shipment attributes with billed_shipping_cost calculated from itemized charges
--- Design: Single source of truth (shipment_charges), view calculates aggregate on-the-fly
--- Performance: Fast via indexed FK relationship (shipment_attribute_id)
-
-CREATE VIEW Test.vw_shipment_summary AS
-SELECT 
-    sa.id,
-    sa.carrier_id,
-    sa.tracking_number,
-    sa.shipment_date,
-    sa.shipping_method,
-    sa.destination_zone,
-    sa.billed_weight_oz,
-    sa.billed_length_in,
-    sa.billed_width_in,
-    sa.billed_height_in,
-    sa.created_date,
-    sa.updated_date,
-    -- Calculated fields from charges
-    ISNULL(SUM(sc.amount), 0) AS billed_shipping_cost,
-    COUNT(sc.id) AS charge_count
-FROM Test.shipment_attributes sa
-LEFT JOIN Test.shipment_charges sc 
-    ON sc.shipment_attribute_id = sa.id
-GROUP BY 
-    sa.id, sa.carrier_id, sa.tracking_number, sa.shipment_date,
-    sa.shipping_method, sa.destination_zone, sa.billed_weight_oz,
-    sa.billed_length_in, sa.billed_width_in, sa.billed_height_in,
-    sa.created_date, sa.updated_date
+ON billing.shipment_attributes (carrier_id, tracking_number);
 
 
 -----------------------------------------------------------------------------------------------------------------
 
-CREATE TABLE Test.carrier_cost_ledger (
+CREATE TABLE dbo.carrier_cost_ledger (
 	id int IDENTITY(1,1) NOT NULL,
 	carrier_invoice_number nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	tracking_number nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -801,31 +1015,145 @@ CREATE TABLE Test.carrier_cost_ledger (
 	-- Foreign Key Constraints
 	CONSTRAINT FK_carrier_cost_ledger_carrier_bill 
 		FOREIGN KEY (carrier_bill_id) 
-		REFERENCES Test.carrier_bill(carrier_bill_id),
+		REFERENCES billing.carrier_bill(carrier_bill_id),
 	
 	CONSTRAINT FK_carrier_cost_ledger_charge_types 
 		FOREIGN KEY (charge_type_id) 
-		REFERENCES test.charge_types(charge_type_id),
+		REFERENCES dbo.charge_types(charge_type_id),
 	
 	CONSTRAINT FK_carrier_cost_ledger_shipping_method 
 		FOREIGN KEY (shipping_method_id) 
-		REFERENCES test.shipping_method(shipping_method_id),
+		REFERENCES dbo.shipping_method(shipping_method_id),
 	
 	CONSTRAINT FK_carrier_cost_ledger_shipment_attributes 
 		FOREIGN KEY (shipment_attribute_id) 
-		REFERENCES Test.shipment_attributes(id)
+		REFERENCES billing.shipment_attributes(id)
 );
 
 -- Unique Constraint: Prevent duplicate charges for same invoice/tracking/charge type combination
 CREATE UNIQUE NONCLUSTERED INDEX UQ_carrier_cost_ledger_invoice_tracking_charge
-ON Test.carrier_cost_ledger (carrier_bill_id, tracking_number, charge_type_id)
+ON dbo.carrier_cost_ledger (carrier_bill_id, tracking_number, charge_type_id)
 WHERE carrier_bill_id IS NOT NULL AND charge_type_id IS NOT NULL;
 
 -- Index for reconciliation queries (filter by status and date)
 CREATE NONCLUSTERED INDEX IX_carrier_cost_ledger_status_date
-ON Test.carrier_cost_ledger (status, carrier_invoice_date)
+ON dbo.carrier_cost_ledger (status, carrier_invoice_date)
 INCLUDE (is_matched, is_processed, amount, variance_amount);
 
 -- Index for shipment attribute FK lookup performance
 CREATE NONCLUSTERED INDEX IX_carrier_cost_ledger_shipment_attribute_id
-ON Test.carrier_cost_ledger (shipment_attribute_id);
+ON dbo.carrier_cost_ledger (shipment_attribute_id);
+
+/*
+================================================================================
+GOLD LAYER VIEWS
+================================================================================
+*/
+
+-----------------------------------------------------------------------------------------------------------------
+-- View: Shipment Summary with Calculated Cost
+-----------------------------------------------------------------------------------------------------------------
+-- Purpose: Provides shipment attributes with billed_shipping_cost calculated from itemized charges
+-- Design: Single source of truth (shipment_charges), view calculates aggregate on-the-fly
+-- Performance: Fast via indexed FK relationship (shipment_attribute_id)
+
+CREATE VIEW billing.vw_shipment_summary AS
+SELECT 
+    sa.id,
+    sa.carrier_id,
+    sa.tracking_number,
+    sa.shipment_date,
+    sa.shipping_method,
+    sa.destination_zone,
+    sa.billed_weight_oz,
+    sa.billed_length_in,
+    sa.billed_width_in,
+    sa.billed_height_in,
+    sa.created_date,
+    sa.updated_date,
+    -- Calculated fields from charges
+    ISNULL(SUM(sc.amount), 0) AS billed_shipping_cost,
+    COUNT(sc.id) AS charge_count
+FROM billing.shipment_attributes sa
+LEFT JOIN billing.shipment_charges sc 
+    ON sc.shipment_attribute_id = sa.id
+GROUP BY 
+    sa.id, sa.carrier_id, sa.tracking_number, sa.shipment_date,
+    sa.shipping_method, sa.destination_zone, sa.billed_weight_oz,
+    sa.billed_length_in, sa.billed_width_in, sa.billed_height_in,
+    sa.created_date, sa.updated_date;
+
+-----------------------------------------------------------------------------------------------------------------
+-- View: FedEx Charges (Unpivot)
+-----------------------------------------------------------------------------------------------------------------
+-- Purpose: Unpivots FedEx bill wide format (50 charge columns) into narrow format
+-- Design: Uses OUTER APPLY to unpivot charge description/amount pairs
+-- Usage: Used by Insert_Unified_tables.sql to map charges to shipment_charges table
+
+CREATE VIEW billing.vw_FedExCharges AS
+SELECT
+    fb.carrier_bill_id,
+    fb.invoice_number,
+    fb.express_or_ground_tracking_id,
+    fb.created_date,
+    v.charge_type,
+    v.charge_amount
+FROM billing.fedex_bill fb
+OUTER APPLY (
+    VALUES
+        ('Transportation Charge', fb.[Transportation Charge Amount]),
+        (fb.[Tracking ID Charge Description], fb.[Tracking ID Charge Amount]),
+        (fb.[Tracking ID Charge Description_1], fb.[Tracking ID Charge Amount_1]),
+        (fb.[Tracking ID Charge Description_2], fb.[Tracking ID Charge Amount_2]),
+        (fb.[Tracking ID Charge Description_3], fb.[Tracking ID Charge Amount_3]),
+        (fb.[Tracking ID Charge Description_4], fb.[Tracking ID Charge Amount_4]),
+        (fb.[Tracking ID Charge Description_5], fb.[Tracking ID Charge Amount_5]),
+        (fb.[Tracking ID Charge Description_6], fb.[Tracking ID Charge Amount_6]),
+        (fb.[Tracking ID Charge Description_7], fb.[Tracking ID Charge Amount_7]),
+        (fb.[Tracking ID Charge Description_8], fb.[Tracking ID Charge Amount_8]),
+        (fb.[Tracking ID Charge Description_9], fb.[Tracking ID Charge Amount_9]),
+        (fb.[Tracking ID Charge Description_10], fb.[Tracking ID Charge Amount_10]),
+        (fb.[Tracking ID Charge Description_11], fb.[Tracking ID Charge Amount_11]),
+        (fb.[Tracking ID Charge Description_12], fb.[Tracking ID Charge Amount_12]),
+        (fb.[Tracking ID Charge Description_13], fb.[Tracking ID Charge Amount_13]),
+        (fb.[Tracking ID Charge Description_14], fb.[Tracking ID Charge Amount_14]),
+        (fb.[Tracking ID Charge Description_15], fb.[Tracking ID Charge Amount_15]),
+        (fb.[Tracking ID Charge Description_16], fb.[Tracking ID Charge Amount_16]),
+        (fb.[Tracking ID Charge Description_17], fb.[Tracking ID Charge Amount_17]),
+        (fb.[Tracking ID Charge Description_18], fb.[Tracking ID Charge Amount_18]),
+        (fb.[Tracking ID Charge Description_19], fb.[Tracking ID Charge Amount_19]),
+        (fb.[Tracking ID Charge Description_20], fb.[Tracking ID Charge Amount_20]),
+        (fb.[Tracking ID Charge Description_21], fb.[Tracking ID Charge Amount_21]),
+        (fb.[Tracking ID Charge Description_22], fb.[Tracking ID Charge Amount_22]),
+        (fb.[Tracking ID Charge Description_23], fb.[Tracking ID Charge Amount_23]),
+        (fb.[Tracking ID Charge Description_24], fb.[Tracking ID Charge Amount_24]),
+        (fb.[Tracking ID Charge Description_25], fb.[Tracking ID Charge Amount_25]),
+        (fb.[Tracking ID Charge Description_26], fb.[Tracking ID Charge Amount_26]),
+        (fb.[Tracking ID Charge Description_27], fb.[Tracking ID Charge Amount_27]),
+        (fb.[Tracking ID Charge Description_28], fb.[Tracking ID Charge Amount_28]),
+        (fb.[Tracking ID Charge Description_29], fb.[Tracking ID Charge Amount_29]),
+        (fb.[Tracking ID Charge Description_30], fb.[Tracking ID Charge Amount_30]),
+        (fb.[Tracking ID Charge Description_31], fb.[Tracking ID Charge Amount_31]),
+        (fb.[Tracking ID Charge Description_32], fb.[Tracking ID Charge Amount_32]),
+        (fb.[Tracking ID Charge Description_33], fb.[Tracking ID Charge Amount_33]),
+        (fb.[Tracking ID Charge Description_34], fb.[Tracking ID Charge Amount_34]),
+        (fb.[Tracking ID Charge Description_35], fb.[Tracking ID Charge Amount_35]),
+        (fb.[Tracking ID Charge Description_36], fb.[Tracking ID Charge Amount_36]),
+        (fb.[Tracking ID Charge Description_37], fb.[Tracking ID Charge Amount_37]),
+        (fb.[Tracking ID Charge Description_38], fb.[Tracking ID Charge Amount_38]),
+        (fb.[Tracking ID Charge Description_39], fb.[Tracking ID Charge Amount_39]),
+        (fb.[Tracking ID Charge Description_40], fb.[Tracking ID Charge Amount_40]),
+        (fb.[Tracking ID Charge Description_41], fb.[Tracking ID Charge Amount_41]),
+        (fb.[Tracking ID Charge Description_42], fb.[Tracking ID Charge Amount_42]),
+        (fb.[Tracking ID Charge Description_43], fb.[Tracking ID Charge Amount_43]),
+        (fb.[Tracking ID Charge Description_44], fb.[Tracking ID Charge Amount_44]),
+        (fb.[Tracking ID Charge Description_45], fb.[Tracking ID Charge Amount_45]),
+        (fb.[Tracking ID Charge Description_46], fb.[Tracking ID Charge Amount_46]),
+        (fb.[Tracking ID Charge Description_47], fb.[Tracking ID Charge Amount_47]),
+        (fb.[Tracking ID Charge Description_48], fb.[Tracking ID Charge Amount_48]),
+        (fb.[Tracking ID Charge Description_49], fb.[Tracking ID Charge Amount_49]),
+        (fb.[Tracking ID Charge Description_50], fb.[Tracking ID Charge Amount_50])
+) v (charge_type, charge_amount)
+WHERE NULLIF(v.charge_type, '') IS NOT NULL
+  AND v.charge_amount IS NOT NULL
+  AND v.charge_amount <> 0;

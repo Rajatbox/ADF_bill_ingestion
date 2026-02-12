@@ -36,12 +36,12 @@ Purpose: Two-part idempotent population script with Multi-Piece Shipment (MPS) h
          It's calculated on-the-fly via vw_shipment_summary view from shipment_charges
          (single source of truth). This eliminates sync issues and ensures correctness.
 
-Sources:  Test.fedex_bill (for attributes with MPS logic)
-Test.vw_FedExCharges (for charges)
-Targets:  Test.shipment_attributes (business key: carrier_id + tracking_number)
-Test.shipment_charges (with shipment_attribute_id FK)
-Joins:    test.charge_types (charge_type_id lookup)
-View:     Test.vw_shipment_summary (calculated billed_shipping_cost)
+Sources:  billing.fedex_bill (for attributes with MPS logic)
+billing.vw_FedExCharges (for charges)
+Targets:  billing.shipment_attributes (business key: carrier_id + tracking_number)
+billing.shipment_charges (with shipment_attribute_id FK)
+Joins:    dbo.charge_types (charge_type_id lookup)
+View:     billing.vw_shipment_summary (calculated billed_shipping_cost)
 
 Idempotency: - Part 1: NOT EXISTS check + UNIQUE constraint prevents duplicate attributes
              - Part 2: NOT EXISTS check prevents duplicate charges
@@ -87,7 +87,7 @@ BEGIN TRY
         SELECT 
             f.*,
             COUNT(*) OVER (PARTITION BY f.express_or_ground_tracking_id) as ground_id_count
-        FROM Test.fedex_bill f
+        FROM billing.fedex_bill f
         WHERE f.created_date > @lastrun
           AND f.carrier_bill_id IS NOT NULL
     ),
@@ -172,7 +172,7 @@ BEGIN TRY
         FROM fx_hoisted
         WHERE mps_role <> 'MPS_HEADER'  -- Filter out header rows
     )
-    INSERT INTO Test.shipment_attributes (
+    INSERT INTO billing.shipment_attributes (
         carrier_id,
         shipment_date,
         shipping_method,
@@ -196,7 +196,7 @@ BEGIN TRY
     FROM fx_final
     WHERE NOT EXISTS (
         SELECT 1 
-        FROM Test.shipment_attributes sa
+        FROM billing.shipment_attributes sa
         WHERE sa.carrier_id = fx_final.carrier_id
           AND sa.tracking_number = fx_final.tracking_number
     );
@@ -228,19 +228,19 @@ BEGIN TRY
             v.charge_amount AS amount,
             sa.id AS shipment_attribute_id  -- FK lookup to establish relationship
         FROM 
-Test.vw_FedExCharges v
+billing.vw_FedExCharges v
         INNER JOIN 
-test.charge_types ct
+dbo.charge_types ct
             ON ct.charge_name = v.charge_type
             AND ct.carrier_id = @Carrier_id
         INNER JOIN
-Test.shipment_attributes sa
+billing.shipment_attributes sa
             ON sa.carrier_id = @Carrier_id
             AND sa.tracking_number = v.express_or_ground_tracking_id
         WHERE 
             v.created_date > @lastrun
     )
-    INSERT INTO Test.shipment_charges (
+    INSERT INTO billing.shipment_charges (
         carrier_id,
         carrier_bill_id,
         tracking_number,
@@ -258,7 +258,7 @@ Test.shipment_attributes sa
     FROM charge_source
     WHERE NOT EXISTS (
         SELECT 1 
-        FROM Test.shipment_charges sc
+        FROM billing.shipment_charges sc
         WHERE sc.shipment_attribute_id = charge_source.shipment_attribute_id
           AND sc.carrier_bill_id = charge_source.carrier_bill_id
           AND sc.charge_type_id = charge_source.charge_type_id

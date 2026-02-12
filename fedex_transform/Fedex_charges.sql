@@ -1,4 +1,4 @@
-CREATE VIEW Test.vw_FedExCharges
+CREATE VIEW billing.vw_FedExCharges
 AS
 SELECT
     fb.carrier_bill_id,
@@ -7,7 +7,7 @@ SELECT
     fb.created_date,
     v.charge_type,
     v.charge_amount
-FROM Test.fedex_bill fb
+FROM billing.fedex_bill fb
 OUTER APPLY (
     VALUES
         ('Transportation Charge', fb.[Transportation Charge Amount]),

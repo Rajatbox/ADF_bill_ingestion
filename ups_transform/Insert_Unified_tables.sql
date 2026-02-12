@@ -20,9 +20,9 @@ Purpose: Populates unified gold layer tables:
          Part 1: shipment_attributes (physical shipment data with unit conversions)
          Part 2: shipment_charges (itemized charges)
 
-Source:   test.ups_bill
-Targets:  Test.shipment_attributes
-          Test.shipment_charges
+Source:   billing.ups_bill
+Targets:  billing.shipment_attributes
+          billing.shipment_charges
 
 Transaction: NO TRANSACTION - Each INSERT is independently idempotent
 Idempotency: Safe to re-run - inserts only if not exists (carrier_id + tracking_number)
@@ -78,7 +78,7 @@ BEGIN TRY
                 MAX(v.billed_width_in) AS billed_width_in,
                 MAX(v.billed_height_in) AS billed_height_in,
                 SYSDATETIME() AS created_date
-            FROM test.ups_bill AS ub
+            FROM billing.ups_bill AS ub
             CROSS APPLY (
                 -- Convert units (data already cleaned in Insert_ELT_&_CB.sql)
                 SELECT
@@ -128,7 +128,7 @@ BEGIN TRY
                 AND ub.tracking_number IS NOT NULL
             GROUP BY ub.tracking_number
     )
-    MERGE INTO Test.shipment_attributes AS target
+    MERGE INTO billing.shipment_attributes AS target
     USING ConsolidatedAttributes AS source
     ON target.carrier_id = source.carrier_id
        AND target.tracking_number = source.tracking_number
@@ -175,7 +175,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.shipment_charges (
+    INSERT INTO billing.shipment_charges (
         carrier_id,
         carrier_bill_id,
         tracking_number,
@@ -193,15 +193,15 @@ BEGIN TRY
         sa.id AS shipment_attribute_id,
         SYSDATETIME() AS created_date
     FROM
-        test.ups_bill AS ub
-    INNER JOIN Test.shipment_attributes AS sa
+        billing.ups_bill AS ub
+    INNER JOIN billing.shipment_attributes AS sa
         ON sa.carrier_id = @carrier_id
         AND sa.tracking_number = ub.tracking_number
-    INNER JOIN Test.carrier_bill AS cb
+    INNER JOIN billing.carrier_bill AS cb
         ON cb.carrier_id = @carrier_id
         AND cb.bill_number = ub.invoice_number
         AND cb.bill_date = ub.invoice_date
-    INNER JOIN test.charge_types AS ct
+    INNER JOIN dbo.charge_types AS ct
         ON ct.carrier_id = @carrier_id
         AND ct.charge_name = ub.charge_description
     WHERE
@@ -209,7 +209,7 @@ BEGIN TRY
         AND ub.net_amount <> 0  -- Exclude zero charges
         AND NOT EXISTS (
             SELECT 1
-            FROM Test.shipment_charges AS sc
+            FROM billing.shipment_charges AS sc
             WHERE sc.carrier_bill_id = cb.carrier_bill_id
                 AND sc.tracking_number = ub.tracking_number
                 AND sc.charge_type_id = ct.charge_type_id

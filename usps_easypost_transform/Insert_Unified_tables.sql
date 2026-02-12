@@ -26,11 +26,11 @@ Purpose: Two-part idempotent population script:
          It's calculated on-the-fly via vw_shipment_summary view from shipment_charges
          (single source of truth). This eliminates sync issues and ensures correctness.
 
-Sources:  test.usps_easy_post_bill (for attributes and charges)
-Targets:  Test.shipment_attributes (business key: carrier_id + tracking_number)
-          Test.shipment_charges (with shipment_attribute_id FK)
-Joins:    test.charge_types (charge_type_id lookup)
-View:     Test.vw_shipment_summary (calculated billed_shipping_cost)
+Sources:  billing.usps_easy_post_bill (for attributes and charges)
+Targets:  billing.shipment_attributes (business key: carrier_id + tracking_number)
+          billing.shipment_charges (with shipment_attribute_id FK)
+Joins:    dbo.charge_types (charge_type_id lookup)
+View:     billing.vw_shipment_summary (calculated billed_shipping_cost)
 
 Charge Structure: USPS EasyPost has 5 charge types unpivoted via CROSS APPLY:
          1. Base Rate (rate column)
@@ -82,7 +82,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.shipment_attributes (
+    INSERT INTO billing.shipment_attributes (
         carrier_id,
         shipment_date,
         shipping_method,
@@ -108,7 +108,7 @@ BEGIN TRY
         u.width AS billed_width_in,
         u.height AS billed_height_in
     FROM
-        test.usps_easy_post_bill u
+        billing.usps_easy_post_bill u
     WHERE
         u.created_at > @lastrun
         AND u.tracking_code IS NOT NULL
@@ -116,7 +116,7 @@ BEGIN TRY
         -- Idempotency: Check business key (carrier_id, tracking_number)
         AND NOT EXISTS (
             SELECT 1
-            FROM Test.shipment_attributes sa
+            FROM billing.shipment_attributes sa
             WHERE sa.carrier_id = @Carrier_id
                 AND sa.tracking_number = u.tracking_code
         );
@@ -156,7 +156,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.shipment_charges (
+    INSERT INTO billing.shipment_charges (
         carrier_id,
         carrier_bill_id,
         tracking_number,
@@ -172,7 +172,7 @@ BEGIN TRY
         charges.amount,
         sa.id AS shipment_attribute_id
     FROM
-        test.usps_easy_post_bill u
+        billing.usps_easy_post_bill u
     -- Unpivot 5 charge types using CROSS APPLY
     CROSS APPLY (
         VALUES 
@@ -183,11 +183,11 @@ BEGIN TRY
             ('Insurance Fee', u.insurance_fee)
     ) AS charges(charge_name, amount)
     -- Join to get charge_type_id
-    INNER JOIN test.charge_types ct 
+    INNER JOIN dbo.charge_types ct 
         ON ct.charge_name = charges.charge_name 
         AND ct.carrier_id = @Carrier_id
     -- Join to get shipment_attribute_id
-    INNER JOIN Test.shipment_attributes sa 
+    INNER JOIN billing.shipment_attributes sa 
         ON sa.tracking_number = u.tracking_code
         AND sa.carrier_id = @Carrier_id
     WHERE
@@ -200,7 +200,7 @@ BEGIN TRY
         -- Idempotency: Check by carrier_bill_id + shipment_attribute_id + charge_type_id
         AND NOT EXISTS (
             SELECT 1
-            FROM Test.shipment_charges sc
+            FROM billing.shipment_charges sc
             WHERE sc.carrier_bill_id = u.carrier_bill_id
                 AND sc.shipment_attribute_id = sa.id
                 AND sc.charge_type_id = ct.charge_type_id

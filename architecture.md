@@ -145,7 +145,7 @@ flowchart TD
 
 **Tables Accessed:**
 - `dbo.carrier` (carrier master data)
-- `Test.carrier_ingestion_tracker` (run history)
+- `billing.carrier_ingestion_tracker` (run history)
 
 **Output Variables (for downstream activities):**
 - `carrier_id` (INT): Carrier identifier
@@ -163,7 +163,7 @@ flowchart TD
 
 **Source:** Azure Blob Storage (CSV file)
 
-**Target Table:** `test.delta_fedex_bill`
+**Target Table:** `billing.delta_fedex_bill`
 
 **Configuration (handling messy CSVs):**
 - **First Row as Header:** Unchecked (forces ordinal column names: `Prop_0`, `Prop_1`, etc.)
@@ -186,8 +186,8 @@ flowchart TD
 - `@Carrier_id`: From LookupCarrierInfo output
 
 **Target Tables:**
-1. `Test.carrier_bill` (invoice-level summaries)
-2. `Test.fedex_bill` (line-level shipment data)
+1. `billing.carrier_bill` (invoice-level summaries)
+2. `billing.fedex_bill` (line-level shipment data)
 
 **Transaction Boundaries:** 
 - **Transactional:** Yes (wrapped in `BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK`)
@@ -221,12 +221,12 @@ flowchart TD
 - `@lastrun`: From LookupCarrierInfo output (filters new data only)
 
 **Source Tables:**
-- `test.delta_fedex_bill` (for service types)
-- `Test.vw_FedExCharges` (for charge descriptions)
+- `billing.delta_fedex_bill` (for service types)
+- `billing.vw_FedExCharges` (for charge descriptions)
 
 **Target Tables:**
-1. `test.shipping_method` (service types like 'Ground', 'Express')
-2. `test.charge_types` (charge descriptions like 'Fuel Surcharge', 'Residential Delivery')
+1. `dbo.shipping_method` (service types like 'Ground', 'Express')
+2. `dbo.charge_types` (charge descriptions like 'Fuel Surcharge', 'Residential Delivery')
 
 **Transaction Boundaries:** 
 - **Transactional:** No (two separate INSERT statements)
@@ -256,19 +256,19 @@ flowchart TD
 - `@lastrun`: From LookupCarrierInfo output (incremental processing)
 
 **Source Tables:**
-- `Test.fedex_bill` (for shipment attributes with MPS classification)
-- `Test.vw_FedExCharges` (unpivoted charge data)
-- `test.charge_types` (charge type lookups)
+- `billing.fedex_bill` (for shipment attributes with MPS classification)
+- `billing.vw_FedExCharges` (unpivoted charge data)
+- `dbo.charge_types` (charge type lookups)
 
 **Target Tables (2-part pipeline):**
 
-**Part 1:** `Test.shipment_attributes`
+**Part 1:** `billing.shipment_attributes`
 - Business key: `carrier_id + tracking_number` (UNIQUE constraint)
 - Contains: Shipment metadata (date, zone, dimensions, weight) - NO cost stored
 - MPS Logic: 4-stage CTE pipeline classifies shipments (NORMAL_SINGLE, MPS_HEADER, MPS_PARENT, MPS_CHILD) and hoists header values to group members
 - Filters out MPS_HEADER rows (summary rows not actual packages)
 
-**Part 2:** `Test.shipment_charges`
+**Part 2:** `billing.shipment_charges`
 - Contains: Itemized charge breakdown per shipment
 - Foreign Key: `shipment_attribute_id` references `shipment_attributes(id)` (establishes 1-to-Many relationship)
 - Single source of truth: `billed_shipping_cost` calculated via `vw_shipment_summary` view from SUM(charges)

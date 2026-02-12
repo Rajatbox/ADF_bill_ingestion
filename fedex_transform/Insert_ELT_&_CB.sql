@@ -21,9 +21,9 @@ Purpose: Two-step transactional data insertion process:
          2. Insert line-level billing data from delta_fedex_bill (ELT staging) 
             into fedex_bill (Carrier Bill line items) with carrier_bill_id foreign key
 
-Source:   test.delta_fedex_bill
-Targets:  Test.carrier_bill (invoice summaries)
-Test.fedex_bill (line items)
+Source:   billing.delta_fedex_bill
+Targets:  billing.carrier_bill (invoice summaries)
+billing.fedex_bill (line items)
 
 Validation: Fails if invoice_date or shipment_date is NULL or empty
 Match:      invoice_number AND invoice_date (INSERT WHERE NOT EXISTS)
@@ -62,7 +62,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.carrier_bill (
+    INSERT INTO billing.carrier_bill (
         carrier_id,
         bill_number,
         bill_date,
@@ -76,7 +76,7 @@ BEGIN TRY
         SUM(TRY_CAST(REPLACE(d.[Net Charge Amount], ',', '') AS decimal(18,2))) AS total_amount,
         COUNT(*) AS num_shipments
     FROM
-test.delta_fedex_bill AS d
+billing.delta_fedex_bill AS d
     WHERE
         d.[Invoice Number] IS NOT NULL
         AND NULLIF(TRIM(CAST(d.[Invoice Date] AS varchar)), '') IS NOT NULL
@@ -88,7 +88,7 @@ test.delta_fedex_bill AS d
     HAVING
         NOT EXISTS (
             SELECT 1
-            FROM Test.carrier_bill AS cb
+            FROM billing.carrier_bill AS cb
             WHERE cb.bill_number = CAST(d.[Invoice Number] AS nvarchar(50))
                 AND cb.bill_date = CAST(NULLIF(TRIM(CAST(d.[Invoice Date] AS varchar)), '') AS date)
         );
@@ -106,7 +106,7 @@ test.delta_fedex_bill AS d
     ================================================================================
     */
 
-    INSERT INTO Test.fedex_bill (
+    INSERT INTO billing.fedex_bill (
         carrier_bill_id,
         invoice_number,
         invoice_date,
@@ -347,8 +347,8 @@ SELECT
     CAST(REPLACE(d.[Tracking ID Charge Amount_49], ',', '') AS decimal(18,2)) AS [Tracking ID Charge Amount_49],
     d.[Tracking ID Charge Description_50],
     CAST(REPLACE(d.[Tracking ID Charge Amount_50], ',', '') AS decimal(18,2)) AS [Tracking ID Charge Amount_50]
-FROM test.delta_fedex_bill d
-INNER JOIN Test.carrier_bill cb
+FROM billing.delta_fedex_bill d
+INNER JOIN billing.carrier_bill cb
     ON cb.bill_number = CAST(d.[Invoice Number] AS nvarchar(50))
     AND cb.bill_date = CAST(NULLIF(TRIM(CAST(d.[Invoice Date] AS varchar)), '') AS date)
     AND cb.carrier_id = @Carrier_id
@@ -356,7 +356,7 @@ WHERE d.[Invoice Number] IS NOT NULL
   AND NULLIF(TRIM(CAST(d.[Invoice Date] AS varchar)), '') IS NOT NULL
   AND NOT EXISTS (
       SELECT 1 
-      FROM Test.fedex_bill t
+      FROM billing.fedex_bill t
       WHERE t.carrier_bill_id = cb.carrier_bill_id
   );
 

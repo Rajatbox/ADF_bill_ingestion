@@ -21,16 +21,16 @@ ADF Pipeline Variables Required:
 Purpose: Three-part pipeline to enrich WMS master data with carrier billing attributes
          and populate cost ledger with itemized charges:
          1. UPDATE shipment_wip with zone and carrier information
-         2. UPDATE shipment_package_wip with dimensions, weights, dates, methods
+         2. UPDATE shipment_package_wip with dimensions, weights, dates, methods, costs
          3. INSERT carrier_cost_ledger with itemized charges and matching status
 
-Source:   test.shipment_attributes (unified carrier billing)
-test.vw_shipment_summary (aggregated view)
-test.shipment_charges (itemized charges)
+Source:   billing.shipment_attributes (unified carrier billing)
+billing.vw_shipment_summary (aggregated view)
+billing.shipment_charges (itemized charges)
 
 Targets:  dbo.shipment_wip (WMS master data - UPDATE)
 dbo.shipment_package_wip (WMS master data - UPDATE)
-test.carrier_cost_ledger (billing ledger - INSERT)
+dbo.carrier_cost_ledger (billing ledger - INSERT)
 
 Idempotency: - Parts 1 & 2: UPDATEs are inherently idempotent (last update wins)
              - Part 3: INSERT with NOT EXISTS check prevents duplicates
@@ -72,7 +72,7 @@ dbo.shipment_wip AS sw
 dbo.shipment_package_wip AS spw
         ON spw.shipment_id = sw.shipment_id
     JOIN 
-test.shipment_attributes AS sa
+billing.shipment_attributes AS sa
         ON spw.tracking_number = sa.tracking_number
     WHERE 
         sa.created_date > @lastrun
@@ -85,7 +85,7 @@ test.shipment_attributes AS sa
     Part 2: UPDATE shipment_package_wip (WMS Master Data Enrichment)
     ================================================================================
     Enrich WMS package master data with carrier billing dimensions, weights, dates,
-    and shipping method information.
+    shipping method, and calculated shipping cost.
     
     Source: vw_shipment_summary (pre-calculated dimensions, weights, cost, dates)
     Match Logic: WMS tracking_number = billing tracking_number
@@ -101,14 +101,15 @@ test.shipment_attributes AS sa
         spw.billed_weight_oz = vss.billed_weight_oz,
         spw.billed_length_in = vss.billed_length_in,
         spw.billed_width_in = vss.billed_width_in,
-        spw.billed_height_in = vss.billed_height_in
+        spw.billed_height_in = vss.billed_height_in,
+        spw.billed_shipping_cost = vss.billed_shipping_cost
     FROM 
 dbo.shipment_package_wip AS spw
     JOIN 
-test.vw_shipment_summary AS vss
+billing.vw_shipment_summary AS vss
         ON spw.tracking_number = vss.tracking_number
     LEFT JOIN 
-test.shipping_method AS sm
+dbo.shipping_method AS sm
         ON sm.method_name = vss.shipping_method
         AND sm.carrier_id = vss.carrier_id
     WHERE 
@@ -135,7 +136,7 @@ test.shipping_method AS sm
     ================================================================================
     */
 
-    INSERT INTO test.carrier_cost_ledger (
+    INSERT INTO dbo.carrier_cost_ledger (
         carrier_invoice_number,
         carrier_invoice_date,
         tracking_number,
@@ -185,15 +186,15 @@ test.shipping_method AS sm
             ELSE 'unknown'
         END AS status
     FROM 
-test.shipment_charges AS sc
+billing.shipment_charges AS sc
     JOIN 
-test.carrier_bill AS cb
+billing.carrier_bill AS cb
         ON cb.carrier_bill_id = sc.carrier_bill_id
     LEFT JOIN 
-test.charge_types AS ct
+dbo.charge_types AS ct
         ON ct.charge_type_id = sc.charge_type_id
     LEFT JOIN 
-test.shipment_attributes AS sa
+billing.shipment_attributes AS sa
         ON sa.tracking_number = sc.tracking_number
         AND sa.carrier_id = sc.carrier_id
     LEFT JOIN 
@@ -209,7 +210,7 @@ dbo.[order] AS o
         sc.created_date > @lastrun
         AND NOT EXISTS (
             SELECT 1
-            FROM test.carrier_cost_ledger AS ccl
+            FROM dbo.carrier_cost_ledger AS ccl
             WHERE ccl.shipment_attribute_id = sc.shipment_attribute_id
                 AND ccl.carrier_bill_id = sc.carrier_bill_id
                 AND ccl.charge_type_id = sc.charge_type_id

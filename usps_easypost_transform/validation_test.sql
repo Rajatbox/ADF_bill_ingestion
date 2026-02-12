@@ -43,20 +43,20 @@ WITH file_total AS (
             CAST(ISNULL(d.carbon_offset_fee, '0') AS decimal(18,2)) + 
             CAST(ISNULL(d.insurance_fee, '0') AS decimal(18,2))
         ) AS expected_total
-    FROM test.delta_usps_easypost_bill d
+    FROM billing.delta_usps_easypost_bill d
 ),
 charges_total AS (
     SELECT 
         SUM(sc.amount) AS actual_total
-    FROM Test.shipment_charges sc
-    INNER JOIN Test.shipment_attributes sa 
+    FROM billing.shipment_charges sc
+    INNER JOIN billing.shipment_attributes sa 
         ON sa.id = sc.shipment_attribute_id
     WHERE sa.carrier_id = @Carrier_id
 ),
 carrier_bill_total AS (
     SELECT 
         SUM(cb.total_amount) AS carrier_bill_total
-    FROM Test.carrier_bill cb
+    FROM billing.carrier_bill cb
     WHERE cb.carrier_id = @Carrier_id
 )
 SELECT 
@@ -89,8 +89,8 @@ SELECT
     COUNT(DISTINCT u.tracking_code) AS [Count in usps_easy_post_bill],
     COUNT(DISTINCT sa.tracking_number) AS [Count in shipment_attributes],
     COUNT(DISTINCT u.tracking_code) - COUNT(DISTINCT sa.tracking_number) AS [Missing Count]
-FROM test.usps_easy_post_bill u
-LEFT JOIN Test.shipment_attributes sa 
+FROM billing.usps_easy_post_bill u
+LEFT JOIN billing.shipment_attributes sa 
     ON sa.tracking_number = u.tracking_code
     AND sa.carrier_id = @Carrier_id;
 
@@ -103,7 +103,7 @@ SELECT
         THEN '✅ All 5 charge types present'
         ELSE '❌ Missing charge types'
     END AS [Status]
-FROM test.charge_types ct
+FROM billing.charge_types ct
 WHERE ct.carrier_id = @Carrier_id;
 
 -- List all charge types for USPS EasyPost
@@ -114,8 +114,8 @@ SELECT
     ct.category,
     ct.charge_category_id,
     COUNT(sc.id) AS [Times Used]
-FROM test.charge_types ct
-LEFT JOIN Test.shipment_charges sc 
+FROM billing.charge_types ct
+LEFT JOIN billing.shipment_charges sc 
     ON sc.charge_type_id = ct.charge_type_id
 WHERE ct.carrier_id = @Carrier_id
 GROUP BY 
@@ -135,10 +135,10 @@ SELECT TOP 1
     ct.charge_name,
     sc.amount,
     SUM(sc.amount) OVER (PARTITION BY sa.id) AS [Total Billed Cost]
-FROM Test.shipment_attributes sa
-INNER JOIN Test.shipment_charges sc 
+FROM billing.shipment_attributes sa
+INNER JOIN billing.shipment_charges sc 
     ON sc.shipment_attribute_id = sa.id
-INNER JOIN test.charge_types ct 
+INNER JOIN billing.charge_types ct 
     ON ct.charge_type_id = sc.charge_type_id
 WHERE sa.carrier_id = @Carrier_id
 ORDER BY sa.tracking_number, ct.charge_name;

@@ -26,10 +26,10 @@ Purpose: Two-part idempotent population script (no MPS logic needed for DHL):
          - recipient_country = 'US' → use domestic_tracking_number
          - recipient_country != 'US' → use international_tracking_number
 
-Sources:  test.dhl_bill (for attributes and charges)
-Targets:  Test.shipment_attributes (business key: carrier_id + tracking_number)
-          Test.shipment_charges (with shipment_attribute_id FK)
-Joins:    test.charge_types (charge_type_id lookup)
+Sources:  billing.dhl_bill (for attributes and charges)
+Targets:  billing.shipment_attributes (business key: carrier_id + tracking_number)
+          billing.shipment_charges (with shipment_attribute_id FK)
+Joins:    dbo.charge_types (charge_type_id lookup)
 
 Unit Conversions Applied:
   - Weight: LB → OZ (× 16), KG → OZ (× 35.274), OZ → OZ (× 1)
@@ -61,7 +61,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.shipment_attributes (
+    INSERT INTO billing.shipment_attributes (
         carrier_id,
         shipment_date,
         shipping_method,
@@ -90,7 +90,7 @@ BEGIN TRY
                 THEN dhl.billed_weight                 -- already ounces
             ELSE dhl.billed_weight                     -- default: assume oz
         END AS billed_weight_oz
-    FROM test.dhl_bill dhl
+    FROM billing.dhl_bill dhl
     WHERE dhl.created_date > @lastrun
       AND dhl.carrier_bill_id IS NOT NULL
       AND CASE 
@@ -99,7 +99,7 @@ BEGIN TRY
           END IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 
-          FROM Test.shipment_attributes sa
+          FROM billing.shipment_attributes sa
           WHERE sa.carrier_id = @Carrier_id
             AND sa.tracking_number = CASE 
                 WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
@@ -141,7 +141,7 @@ BEGIN TRY
             CAST(x.amount AS decimal(18,2)) AS amount,
             sa.id AS shipment_attribute_id
         FROM 
-            test.dhl_bill dhl
+            billing.dhl_bill dhl
         CROSS APPLY (VALUES
             (N'Transportation Cost',               dhl.transportation_cost),
             (N'Non-Qualified Dimensional Charges',  dhl.non_qualified_dimensional_charges),
@@ -149,11 +149,11 @@ BEGIN TRY
             (N'Delivery Area Surcharge Amount',     dhl.delivery_area_surcharge_amount)
         ) AS x(charge_name, amount)
         INNER JOIN 
-            test.charge_types ct
+            dbo.charge_types ct
             ON ct.charge_name = x.charge_name
             AND ct.carrier_id = @Carrier_id
         INNER JOIN
-            Test.shipment_attributes sa
+            billing.shipment_attributes sa
             ON sa.carrier_id = @Carrier_id
             AND sa.tracking_number = CASE 
                 WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
@@ -165,7 +165,7 @@ BEGIN TRY
             AND x.amount IS NOT NULL
             AND x.amount <> 0
     )
-    INSERT INTO Test.shipment_charges (
+    INSERT INTO billing.shipment_charges (
         carrier_id,
         carrier_bill_id,
         tracking_number,
@@ -183,7 +183,7 @@ BEGIN TRY
     FROM charge_source
     WHERE NOT EXISTS (
         SELECT 1 
-        FROM Test.shipment_charges sc
+        FROM billing.shipment_charges sc
         WHERE sc.shipment_attribute_id = charge_source.shipment_attribute_id
           AND sc.carrier_bill_id = charge_source.carrier_bill_id
           AND sc.charge_type_id = charge_source.charge_type_id

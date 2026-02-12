@@ -22,8 +22,8 @@ Purpose: Automatically populate and maintain the shipping_method reference table
          Charge types are NOT synced here — DHL is a wide deterministic format
          with 4 fixed charge columns. Charge types should be seeded once.
 
-Source:  test.dhl_bill (for shipping methods - discovered from data)
-Target:  test.shipping_method
+Source:  billing.dhl_bill (for shipping methods - discovered from data)
+Target:  dbo.shipping_method
 
 Execution Order: THIRD in pipeline (after Insert_ELT_&_CB.sql completes).
                  This ensures reference data is discovered from validated bills only.
@@ -55,7 +55,7 @@ Examples: 'DHL Parcel International Standard', 'DHL Parcel International Direct'
 ================================================================================
 */
 
-INSERT INTO test.shipping_method (
+INSERT INTO dbo.shipping_method (
     carrier_id,
     method_name,
     service_level,
@@ -71,14 +71,14 @@ SELECT DISTINCT
     1 AS is_active,
     NULL AS name_in_bill
 FROM 
-    test.dhl_bill dhl
+    billing.dhl_bill dhl
 WHERE 
     dhl.created_date > @lastrun
     AND dhl.shipping_method IS NOT NULL
     AND NULLIF(TRIM(CAST(dhl.shipping_method AS varchar(255))), '') IS NOT NULL
     AND NOT EXISTS (
         SELECT 1
-        FROM test.shipping_method sm
+        FROM dbo.shipping_method sm
         WHERE sm.method_name = CAST(dhl.shipping_method AS varchar(255))
             AND sm.carrier_id = @Carrier_id
     );

@@ -24,11 +24,11 @@ Purpose: Automatically populate and maintain reference/lookup tables by
          Block 1: Sync shipping_method table with new service types
          Block 2: Sync charge_types table with new charge descriptions
 
-Source:  test.delta_fedex_bill (for service types)
-Test.vw_FedExCharges (for charge types)
+Source:  billing.delta_fedex_bill (for service types)
+billing.vw_FedExCharges (for charge types)
          
-Targets: test.shipping_method
-test.charge_types
+Targets: dbo.shipping_method
+dbo.charge_types
 
 Execution Order: THIRD in pipeline (after Insert_ELT_&_CB.sql completes).
                  This ensures reference data is discovered from validated bills only.
@@ -58,7 +58,7 @@ methods into the shipping_method table. Populates with sensible defaults:
 ================================================================================
 */
 
-INSERT INTO test.shipping_method (
+INSERT INTO dbo.shipping_method (
     carrier_id,
     method_name,
     service_level,
@@ -74,13 +74,13 @@ SELECT DISTINCT
     1 AS is_active,
     NULL AS name_in_bill
 FROM 
-test.delta_fedex_bill d
+billing.delta_fedex_bill d
 WHERE 
     d.[Service Type] IS NOT NULL
     AND NULLIF(TRIM(CAST(d.[Service Type] AS varchar)), '') IS NOT NULL
     AND NOT EXISTS (
         SELECT 1
-        FROM test.shipping_method sm
+        FROM dbo.shipping_method sm
         WHERE sm.method_name = CAST(d.[Service Type] AS varchar(255))
             AND sm.carrier_id = @Carrier_id
     );
@@ -100,7 +100,7 @@ charge types into the charge_types table. Applies category logic:
 ================================================================================
 */
 
-INSERT INTO test.charge_types (
+INSERT INTO dbo.charge_types (
     carrier_id,
     charge_name,
     category,
@@ -118,14 +118,14 @@ SELECT DISTINCT
         ELSE 11
     END AS charge_category_id
 FROM 
-Test.vw_FedExCharges v
+billing.vw_FedExCharges v
 WHERE 
     v.created_date > @lastrun
     AND v.charge_type IS NOT NULL
     AND NULLIF(TRIM(v.charge_type), '') IS NOT NULL
     AND NOT EXISTS (
         SELECT 1
-        FROM test.charge_types ct
+        FROM dbo.charge_types ct
         WHERE ct.charge_name = CAST(v.charge_type AS varchar(255))
             AND ct.carrier_id = @Carrier_id
     );

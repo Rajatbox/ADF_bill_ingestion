@@ -19,7 +19,7 @@ Purpose: Two-step transactional data insertion process:
          1. Aggregate and insert invoice-level summary data from delta_usps_easypost_bill 
             into carrier_bill (Carrier Bill summary) - generates carrier_bill_id
          2. Insert line-level billing data from delta_usps_easypost_bill (ELT staging) 
-            into test.usps_easy_post_bill (Carrier Bill line items)
+            into billing.usps_easy_post_bill (Carrier Bill line items)
 
 Invoice Number Generation: 
          invoice_number = carrier_account_id + '-' + yyyy-MM-dd from created_at
@@ -29,9 +29,9 @@ Invoice Number Generation:
          
          Note: Same formula used in both INSERTs to ensure deterministic joins
 
-Source:   test.delta_usps_easypost_bill
-Targets:  Test.carrier_bill (invoice summaries)
-          test.usps_easy_post_bill (line items)
+Source:   billing.delta_usps_easypost_bill
+Targets:  billing.carrier_bill (invoice summaries)
+          billing.usps_easy_post_bill (line items)
 
 Validation: Fails if created_at or tracking_code is NULL or empty
 Match:      invoice_number AND bill_date (INSERT WHERE NOT EXISTS)
@@ -68,7 +68,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.carrier_bill (
+    INSERT INTO billing.carrier_bill (
         carrier_id,
         bill_number,
         bill_date,
@@ -82,7 +82,7 @@ BEGIN TRY
         SUM(CAST(COALESCE(NULLIF(TRIM(d.postage_fee), ''), '0') AS decimal(18,2))) AS total_amount,
         COUNT(d.tracking_code) AS num_shipments
     FROM
-        test.delta_usps_easypost_bill AS d
+        billing.delta_usps_easypost_bill AS d
     WHERE
         -- Validation: Fail fast on bad data
         d.created_at IS NOT NULL 
@@ -94,7 +94,7 @@ BEGIN TRY
         CAST(d.created_at AS DATE)
     HAVING NOT EXISTS (
         SELECT 1
-        FROM Test.carrier_bill cb
+        FROM billing.carrier_bill cb
         WHERE cb.bill_number = CONCAT(d.carrier_account_id, '-', FORMAT(CAST(d.created_at AS DATE), 'yyyy-MM-dd'))
           AND cb.bill_date = CAST(d.created_at AS DATE)
           AND cb.carrier_id = @Carrier_id
@@ -107,7 +107,7 @@ BEGIN TRY
     Step 2: Insert Line-Level Billing Data
     ================================================================================
     Inserts individual shipment records from delta_usps_easypost_bill into 
-    test.usps_easy_post_bill.
+    billing.usps_easy_post_bill.
     
     Join Strategy:
     - Compute same invoice_number formula to validate invoice exists in carrier_bill
@@ -122,7 +122,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO test.usps_easy_post_bill (
+    INSERT INTO billing.usps_easy_post_bill (
         tracking_code,
         invoice_number,
         carrier_bill_id,
@@ -181,8 +181,8 @@ BEGIN TRY
         -- Service information
         d.service
     FROM
-        test.delta_usps_easypost_bill AS d
-    INNER JOIN Test.carrier_bill cb
+        billing.delta_usps_easypost_bill AS d
+    INNER JOIN billing.carrier_bill cb
         ON cb.bill_number = CONCAT(d.carrier_account_id, '-', FORMAT(CAST(d.created_at AS DATE), 'yyyy-MM-dd'))
         AND cb.bill_date = CAST(d.created_at AS DATE)
         AND cb.carrier_id = @Carrier_id  -- Always include carrier_id in join
@@ -195,7 +195,7 @@ BEGIN TRY
         -- Idempotency (Design Constraint #9): Check by carrier_bill_id only
         AND NOT EXISTS (
             SELECT 1
-            FROM test.usps_easy_post_bill t
+            FROM billing.usps_easy_post_bill t
             WHERE t.carrier_bill_id = cb.carrier_bill_id
         );
 

@@ -19,7 +19,7 @@ WITH delta_total AS (
             + ISNULL(CAST(NULLIF(TRIM(d.fuel_surcharge_amount), '') AS decimal(18,2)), 0)
             + ISNULL(CAST(NULLIF(TRIM(d.delivery_area_surcharge_amount), '') AS decimal(18,2)), 0)
         ) AS total
-    FROM test.delta_dhl_bill d
+    FROM billing.delta_dhl_bill d
 ),
 dhl_bill_total AS (
     SELECT 
@@ -29,12 +29,12 @@ dhl_bill_total AS (
             + ISNULL(dhl.fuel_surcharge_amount, 0)
             + ISNULL(dhl.delivery_area_surcharge_amount, 0)
         ) AS total
-    FROM test.dhl_bill dhl
+    FROM billing.dhl_bill dhl
 ),
 charges_total AS (
     SELECT SUM(sc.amount) AS total
-    FROM Test.shipment_charges sc
-    JOIN Test.shipment_attributes sa ON sa.id = sc.shipment_attribute_id
+    FROM billing.shipment_charges sc
+    JOIN billing.shipment_attributes sa ON sa.id = sc.shipment_attribute_id
     WHERE sa.carrier_id = @Carrier_id
 )
 SELECT 

@@ -17,7 +17,7 @@ ADF Pipeline Variables Required:
 
 Tables:
   - dbo.carrier (carrier master)
-  - Test.carrier_ingestion_tracker (run history)
+  - billing.carrier_ingestion_tracker (run history)
 
 Execution Order: FIRST in pipeline (provides parameters for all subsequent steps)
 ================================================================================
@@ -29,7 +29,7 @@ SELECT
 FROM
 dbo.carrier c
 LEFT JOIN 
-Test.carrier_ingestion_tracker cit
+billing.carrier_ingestion_tracker cit
 ON
     c.carrier_name = cit.carrier_name
 WHERE

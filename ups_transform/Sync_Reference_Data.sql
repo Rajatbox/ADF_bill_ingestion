@@ -19,9 +19,9 @@ ADF Pipeline Variables Required:
 Purpose: Discovers and inserts NEW shipping methods and charge types from ups_bill
          into reference tables. Runs incrementally based on created_date.
 
-Source:   test.ups_bill
-Targets:  test.shipping_method
-          test.charge_types
+Source:   billing.ups_bill
+Targets:  dbo.shipping_method
+          dbo.charge_types
 
 Transaction: NO TRANSACTION - Each INSERT is independently idempotent via NOT EXISTS
 Idempotency: Safe to re-run - inserts only if not exists (with carrier_id check)
@@ -46,7 +46,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO test.shipping_method (
+    INSERT INTO dbo.shipping_method (
         carrier_id,
         method_name,
         service_level,
@@ -64,7 +64,7 @@ BEGIN TRY
         1 AS is_active,
         ub.charge_description AS name_in_bill
     FROM
-        test.ups_bill AS ub
+        billing.ups_bill AS ub
     WHERE
         ub.created_date > @lastrun
         AND ub.charge_category_code = 'SHP'
@@ -72,7 +72,7 @@ BEGIN TRY
         AND ub.charge_description IS NOT NULL
         AND NOT EXISTS (
             SELECT 1
-            FROM test.shipping_method AS sm
+            FROM dbo.shipping_method AS sm
             WHERE sm.carrier_id = @carrier_id
                 AND sm.method_name = ub.charge_description
         );
@@ -96,7 +96,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO test.charge_types (
+    INSERT INTO dbo.charge_types (
         carrier_id,
         charge_name,
         freight,
@@ -123,13 +123,13 @@ BEGIN TRY
             ELSE 11
         END AS charge_category_id
     FROM
-        test.ups_bill AS ub
+        billing.ups_bill AS ub
     WHERE
         ub.created_date > @lastrun
         AND ub.charge_description IS NOT NULL
         AND NOT EXISTS (
             SELECT 1
-            FROM test.charge_types AS ct
+            FROM dbo.charge_types AS ct
             WHERE ct.carrier_id = @carrier_id
                 AND ct.charge_name = ub.charge_description
         );

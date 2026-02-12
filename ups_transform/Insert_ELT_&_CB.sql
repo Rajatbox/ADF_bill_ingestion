@@ -21,9 +21,9 @@ Purpose: Two-step transactional data insertion process:
          2. Insert line-level billing data from delta_ups_bill (ELT staging) 
             into ups_bill (Carrier Bill line items) with carrier_bill_id foreign key
 
-Source:   test.delta_ups_bill
-Targets:  Test.carrier_bill (invoice summaries)
-          test.ups_bill (line items)
+Source:   billing.delta_ups_bill
+Targets:  billing.carrier_bill (invoice summaries)
+          billing.ups_bill (line items)
 
 Validation: Fails if invoice_date is NULL or empty (fail fast with CAST)
 Match:      carrier_bill_id (INSERT WHERE NOT EXISTS) - cleaner idempotency
@@ -52,7 +52,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.carrier_bill (
+    INSERT INTO billing.carrier_bill (
         carrier_id,
         bill_number,
         bill_date,
@@ -66,12 +66,12 @@ BEGIN TRY
         SUM(CAST(d.[Net Amount] AS decimal(18,2))) AS total_amount,
         COUNT(DISTINCT d.[Tracking Number]) AS num_shipments
     FROM
-        test.delta_ups_bill AS d
+        billing.delta_ups_bill AS d
     WHERE
         NULLIF(TRIM(d.[Invoice Date]), '') IS NOT NULL
         AND NOT EXISTS (
             SELECT 1
-            FROM Test.carrier_bill AS cb
+            FROM billing.carrier_bill AS cb
             WHERE cb.bill_number = d.[Invoice Number]
                 AND cb.bill_date = CONVERT(date, NULLIF(TRIM(d.[Invoice Date]), ''))
                 AND cb.carrier_id = @carrier_id
@@ -102,7 +102,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO test.ups_bill (
+    INSERT INTO billing.ups_bill (
         carrier_bill_id,
         invoice_number,
         invoice_date,
@@ -145,7 +145,7 @@ BEGIN TRY
         NULLIF(TRIM(d.[Sender Postal]), ''),
         SYSDATETIME()
     FROM
-        test.delta_ups_bill AS d
+        billing.delta_ups_bill AS d
     CROSS APPLY (
         -- Split dimensions on 'x' delimiter: "11.0x  8.0x  3.0" -> [11.0, 8.0, 3.0]
         SELECT
@@ -159,7 +159,7 @@ BEGIN TRY
             NULLIF(TRY_CAST(TRIM(SUBSTRING(d.[Package Dimensions], p.pos1 + 1, p.pos2 - p.pos1 - 1)) AS decimal(18,2)), 0) AS dim_width,
             NULLIF(TRY_CAST(TRIM(SUBSTRING(d.[Package Dimensions], p.pos2 + 1, LEN(d.[Package Dimensions]))) AS decimal(18,2)), 0) AS dim_height
     ) dims
-    INNER JOIN Test.carrier_bill AS cb
+    INNER JOIN billing.carrier_bill AS cb
         ON cb.bill_number = d.[Invoice Number]
         AND cb.bill_date = CONVERT(date, NULLIF(TRIM(d.[Invoice Date]), ''))
         AND cb.carrier_id = @carrier_id
@@ -167,7 +167,7 @@ BEGIN TRY
         NULLIF(TRIM(d.[Invoice Date]), '') IS NOT NULL
         AND NOT EXISTS (
             SELECT 1
-            FROM test.ups_bill AS ub
+            FROM billing.ups_bill AS ub
             WHERE ub.carrier_bill_id = cb.carrier_bill_id
         );
 

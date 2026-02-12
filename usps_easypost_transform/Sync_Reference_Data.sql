@@ -22,9 +22,9 @@ Purpose: Automatically populate and maintain reference/lookup tables by
          
          Syncs shipping_method table with new service types discovered in data.
 
-Source:  test.usps_easy_post_bill (for service types)
+Source:  billing.usps_easy_post_bill (for service types)
          
-Targets: test.shipping_method
+Targets: dbo.shipping_method
 
 Note: Charge types for USPS EasyPost are static (5 types) and should be 
       seeded separately during initial setup via manual INSERT.
@@ -62,7 +62,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO test.shipping_method (
+    INSERT INTO dbo.shipping_method (
         carrier_id,
         method_name,
         service_level,
@@ -78,14 +78,14 @@ BEGIN TRY
         1 AS is_active,
         NULL AS name_in_bill
     FROM 
-        test.usps_easy_post_bill u
+        billing.usps_easy_post_bill u
     WHERE 
         u.created_at > @lastrun
         AND u.service IS NOT NULL
         AND NULLIF(TRIM(u.service), '') IS NOT NULL
         AND NOT EXISTS (
             SELECT 1
-            FROM test.shipping_method sm
+            FROM dbo.shipping_method sm
             WHERE sm.method_name = u.service
                 AND sm.carrier_id = @Carrier_id
         );

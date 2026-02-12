@@ -13,7 +13,7 @@ The NOT EXISTS check in the carrier_bill insert (Step 1) only compares `bill_num
 HAVING
     NOT EXISTS (
         SELECT 1
-        FROM Test.carrier_bill AS cb
+        FROM billing.carrier_bill AS cb
         WHERE cb.bill_number = CAST(d.[Invoice Number] AS nvarchar(50))
             AND cb.bill_date = CAST(NULLIF(TRIM(CAST(d.[Invoice Date] AS varchar)), '') AS date)
     );
@@ -29,7 +29,7 @@ Include `carrier_id` in the NOT EXISTS comparison for more precise duplicate det
 HAVING
     NOT EXISTS (
         SELECT 1
-        FROM Test.carrier_bill AS cb
+        FROM billing.carrier_bill AS cb
         WHERE cb.bill_number = CAST(d.[Invoice Number] AS nvarchar(50))
             AND cb.bill_date = CAST(NULLIF(TRIM(CAST(d.[Invoice Date] AS varchar)), '') AS date)
             AND cb.carrier_id = @Carrier_id
@@ -56,7 +56,7 @@ Add a non-clustered index on the `created_date` column:
 
 ```sql
 CREATE NONCLUSTERED INDEX IX_fedex_bill_created_date 
-ON Test.fedex_bill (created_date);
+ON billing.fedex_bill (created_date);
 ```
 
 **Alternative (Composite Index):**
@@ -64,7 +64,7 @@ If queries often filter by both `created_date` and `carrier_bill_id`, consider a
 
 ```sql
 CREATE NONCLUSTERED INDEX IX_fedex_bill_created_date_carrier_bill_id 
-ON Test.fedex_bill (created_date, carrier_bill_id);
+ON billing.fedex_bill (created_date, carrier_bill_id);
 ```
 
 **Priority:** High  
@@ -88,13 +88,13 @@ Without these audit columns, it's difficult to:
 Add two new columns to the `carrier_bill` table:
 
 ```sql
-ALTER TABLE Test.carrier_bill
+ALTER TABLE billing.carrier_bill
 ADD source_filename varchar(255) NULL,
     created_date datetime2 NOT NULL DEFAULT sysdatetime();
 
 -- Add index on created_date for potential filtering/reporting
 CREATE NONCLUSTERED INDEX IX_carrier_bill_created_date 
-ON Test.carrier_bill (created_date);
+ON billing.carrier_bill (created_date);
 ```
 
 **Implementation Notes:**
@@ -119,10 +119,10 @@ Without timestamp tracking on these reference tables, it's difficult to audit wh
 Add `created_date` column to both tables:
 
 ```sql
-ALTER TABLE Test.charge_types
+ALTER TABLE billing.charge_types
 ADD created_date datetime2 NOT NULL DEFAULT sysdatetime();
 
-ALTER TABLE Test.shipping_method
+ALTER TABLE billing.shipping_method
 ADD created_date datetime2 NOT NULL DEFAULT sysdatetime();
 ```
 
@@ -147,7 +147,7 @@ Add a computed hash column to both delta and target tables:
 
 ```sql
 -- Add hash column to delta_fedex_bill
-ALTER TABLE test.delta_fedex_bill
+ALTER TABLE billing.delta_fedex_bill
 ADD shipment_hash AS CHECKSUM(
     CONCAT(
         CAST(@Carrier_id AS varchar(10)),
@@ -159,7 +159,7 @@ ADD shipment_hash AS CHECKSUM(
 ) PERSISTED;
 
 -- Add hash column to fedex_bill and shipment_package_wip
-ALTER TABLE Test.fedex_bill
+ALTER TABLE billing.fedex_bill
 ADD shipment_hash int NULL;
 
 ALTER TABLE dbo.shipment_package_wip
@@ -167,7 +167,7 @@ ADD shipment_hash int NULL;
 
 -- Create indexes on hash columns
 CREATE NONCLUSTERED INDEX IX_fedex_bill_shipment_hash 
-ON Test.fedex_bill (shipment_hash);
+ON billing.fedex_bill (shipment_hash);
 
 CREATE NONCLUSTERED INDEX IX_shipment_package_wip_shipment_hash 
 ON dbo.shipment_package_wip (shipment_hash);
@@ -215,7 +215,7 @@ ADD shipment_attribute_id int NULL;
 ALTER TABLE dbo.shipment_package_wip
 ADD CONSTRAINT FK_shipment_package_wip_shipment_attributes
     FOREIGN KEY (shipment_attribute_id)
-    REFERENCES Test.shipment_attributes(shipment_attribute_id);
+    REFERENCES billing.shipment_attributes(shipment_attribute_id);
 
 -- Add index for join performance
 CREATE NONCLUSTERED INDEX IX_shipment_package_wip_shipment_attribute_id 
@@ -357,8 +357,8 @@ WHERE ub.created_date > @lastrun
 
 **Part 2 - INSERT shipment_charges:**
 ```sql
-FROM test.ups_bill AS ub
-INNER JOIN Test.shipment_attributes AS sa  -- Can't join if no tracking number
+FROM billing.ups_bill AS ub
+INNER JOIN billing.shipment_attributes AS sa  -- Can't join if no tracking number
     ON sa.carrier_id = @carrier_id
     AND sa.tracking_number = ub.tracking_number
 ```
@@ -383,16 +383,16 @@ If invoice-level charges need to be tracked, options include:
 
 **Option 1: Separate Table for Invoice-Level Charges**
 ```sql
-CREATE TABLE Test.invoice_level_charges (
+CREATE TABLE billing.invoice_level_charges (
     id int IDENTITY(1,1) PRIMARY KEY,
     carrier_id int NOT NULL,
     carrier_bill_id int NOT NULL,
     charge_type_id int NOT NULL,
     amount decimal(18,2) NOT NULL,
     created_date datetime2 DEFAULT SYSDATETIME(),
-    FOREIGN KEY (carrier_id) REFERENCES test.carrier(carrier_id),
-    FOREIGN KEY (carrier_bill_id) REFERENCES Test.carrier_bill(carrier_bill_id),
-    FOREIGN KEY (charge_type_id) REFERENCES test.charge_types(charge_type_id)
+    FOREIGN KEY (carrier_id) REFERENCES billing.carrier(carrier_id),
+    FOREIGN KEY (carrier_bill_id) REFERENCES billing.carrier_bill(carrier_bill_id),
+    FOREIGN KEY (charge_type_id) REFERENCES dbo.charge_types(charge_type_id)
 );
 ```
 
@@ -418,13 +418,13 @@ Filter validation query to only compare charges with tracking numbers:
 -- Modified validation: Only compare shipment-level charges
 WITH file_total AS (
     SELECT SUM(CAST([Net Amount] AS decimal(18,2))) AS expected
-    FROM test.delta_ups_bill
+    FROM billing.delta_ups_bill
     WHERE [Tracking Number] IS NOT NULL  -- Match filter logic
 ),
 charges_total AS (
     SELECT SUM(amount) AS actual
-    FROM Test.shipment_charges sc
-    JOIN Test.shipment_attributes sa ON sa.id = sc.shipment_attribute_id
+    FROM billing.shipment_charges sc
+    JOIN billing.shipment_attributes sa ON sa.id = sc.shipment_attribute_id
     WHERE sa.carrier_id = @carrier_id
 )
 SELECT expected, actual, ABS(expected - actual) AS difference;

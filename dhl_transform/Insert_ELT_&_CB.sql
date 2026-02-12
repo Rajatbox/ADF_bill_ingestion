@@ -21,9 +21,9 @@ Purpose: Two-step transactional data insertion process:
          2. Insert line-level billing data from delta_dhl_bill into dhl_bill
             with carrier_bill_id foreign key
 
-Source:   test.delta_dhl_bill
-Targets:  Test.carrier_bill (invoice summaries)
-          test.dhl_bill (line items)
+Source:   billing.delta_dhl_bill
+Targets:  billing.carrier_bill (invoice summaries)
+          billing.dhl_bill (line items)
 
 Tracking Number Logic (applied in Step 2):
   - international_tracking_number: Col 12 saved as-is
@@ -60,7 +60,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO Test.carrier_bill (
+    INSERT INTO billing.carrier_bill (
         carrier_id,
         bill_number,
         bill_date,
@@ -79,7 +79,7 @@ BEGIN TRY
         ) AS total_amount,
         COUNT(*) AS num_shipments
     FROM
-        test.delta_dhl_bill AS d
+        billing.delta_dhl_bill AS d
     WHERE
         d.invoice_number IS NOT NULL
         AND NULLIF(TRIM(d.invoice_date), '') IS NOT NULL
@@ -89,7 +89,7 @@ BEGIN TRY
     HAVING
         NOT EXISTS (
             SELECT 1
-            FROM Test.carrier_bill AS cb
+            FROM billing.carrier_bill AS cb
             WHERE cb.bill_number = CAST(d.invoice_number AS nvarchar(50))
                 AND cb.bill_date = CAST(NULLIF(TRIM(d.invoice_date), '') AS date)
                 AND cb.carrier_id = @Carrier_id
@@ -112,7 +112,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO test.dhl_bill (
+    INSERT INTO billing.dhl_bill (
         carrier_bill_id,
         invoice_number,
         invoice_date,
@@ -154,8 +154,8 @@ BEGIN TRY
         CAST(NULLIF(TRIM(d.non_qualified_dimensional_charges), '') AS decimal(18,2)),
         CAST(NULLIF(TRIM(d.fuel_surcharge_amount), '') AS decimal(18,2)),
         CAST(NULLIF(TRIM(d.delivery_area_surcharge_amount), '') AS decimal(18,2))
-    FROM test.delta_dhl_bill d
-    INNER JOIN Test.carrier_bill cb
+    FROM billing.delta_dhl_bill d
+    INNER JOIN billing.carrier_bill cb
         ON cb.bill_number = CAST(d.invoice_number AS nvarchar(50))
         AND cb.bill_date = CAST(NULLIF(TRIM(d.invoice_date), '') AS date)
         AND cb.carrier_id = @Carrier_id
@@ -163,7 +163,7 @@ BEGIN TRY
       AND NULLIF(TRIM(d.invoice_date), '') IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 
-          FROM test.dhl_bill t
+          FROM billing.dhl_bill t
           WHERE t.carrier_bill_id = cb.carrier_bill_id
       );
 

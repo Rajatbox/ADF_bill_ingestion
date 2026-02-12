@@ -12,7 +12,7 @@ Note: This table is recreated/truncated by ADF before each load.
 ================================================================================
 */
 
-CREATE TABLE test.delta_ups_bill (
+CREATE TABLE billing.delta_ups_bill (
     [Version] VARCHAR(50) NULL,
     [Recipient Number] VARCHAR(50) NULL,
     [Account Number] VARCHAR(50) NULL,
