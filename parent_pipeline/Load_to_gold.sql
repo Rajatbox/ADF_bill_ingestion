@@ -12,8 +12,8 @@ ADF Pipeline Variables Required:
   
   OUTPUT:
     - Status: 'SUCCESS' or 'ERROR'
-    - ShipmentsUpdated: INT - Number of shipment_wip records updated
-    - PackagesUpdated: INT - Number of shipment_package_wip records updated
+    - ShipmentsUpdated: INT - Number of shipment records updated
+    - PackagesUpdated: INT - Number of shipment_package records updated
     - LedgerInserted: INT - Number of carrier_cost_ledger records inserted
     - ErrorNumber: INT (if error)
     - ErrorMessage: NVARCHAR (if error)
@@ -21,16 +21,16 @@ ADF Pipeline Variables Required:
 
 Purpose: Three-part pipeline to enrich WMS master data with carrier billing attributes
          and populate cost ledger with itemized charges:
-         1. UPDATE shipment_wip with zone and carrier information
-         2. UPDATE shipment_package_wip with dimensions, weights, dates, methods, costs
+         1. UPDATE shipment with zone and carrier information
+         2. UPDATE shipment_package with dimensions, weights, dates, methods, costs
          3. INSERT carrier_cost_ledger with itemized charges and matching status
 
 Source:   billing.shipment_attributes (unified carrier billing)
 billing.vw_shipment_summary (aggregated view)
 billing.shipment_charges (itemized charges)
 
-Targets:  dbo.shipment_wip (WMS master data - UPDATE)
-dbo.shipment_package_wip (WMS master data - UPDATE)
+Targets:  dbo.shipment (WMS master data - UPDATE)
+dbo.shipment_package (WMS master data - UPDATE)
 dbo.carrier_cost_ledger (billing ledger - INSERT)
 
 Idempotency: - Parts 1 & 2: UPDATEs are inherently idempotent (last update wins)
@@ -53,7 +53,7 @@ BEGIN TRY
 
     /*
     ================================================================================
-    Part 1: UPDATE shipment_wip (WMS Master Data Enrichment)
+    Part 1: UPDATE shipment (WMS Master Data Enrichment)
     ================================================================================
     Enrich WMS shipment master data with carrier billing zone and carrier information.
     
@@ -68,9 +68,9 @@ BEGIN TRY
         sw.destination_zone = sa.destination_zone,
         sw.carrier_id = sa.carrier_id
     FROM 
-dbo.shipment_wip AS sw
+dbo.shipment AS sw
     JOIN 
-dbo.shipment_package_wip AS spw
+dbo.shipment_package AS spw
         ON spw.shipment_id = sw.shipment_id
     JOIN 
 billing.shipment_attributes AS sa
@@ -83,7 +83,7 @@ billing.shipment_attributes AS sa
 
     /*
     ================================================================================
-    Part 2: UPDATE shipment_package_wip (WMS Master Data Enrichment)
+    Part 2: UPDATE shipment_package (WMS Master Data Enrichment)
     ================================================================================
     Enrich WMS package master data with carrier billing dimensions, weights, dates,
     shipping method, and calculated shipping cost.
@@ -105,7 +105,7 @@ billing.shipment_attributes AS sa
         spw.billed_height_in = vss.billed_height_in,
         spw.billed_shipping_cost = vss.billed_shipping_cost
     FROM 
-dbo.shipment_package_wip AS spw
+dbo.shipment_package AS spw
     JOIN 
 billing.vw_shipment_summary AS vss
         ON spw.tracking_number = vss.tracking_number
@@ -155,7 +155,6 @@ dbo.shipping_method AS sm
         shipment_package_id,
         carrier_bill_id,
         shipment_attribute_id,
-        is_matched,
         status
     )
     SELECT
@@ -175,17 +174,13 @@ dbo.shipping_method AS sm
         sc.carrier_bill_id,
         sc.shipment_attribute_id,
         CASE 
-            WHEN spw.shipment_package_id IS NOT NULL THEN 1
-            ELSE 0
-        END AS is_matched,
-        CASE 
             -- 1. If it's a weight exception, use the type from SPW
             WHEN spw.is_weight_exception = 1 THEN spw.weight_exception_type
             -- 2. If not weight but cost exception, use the type from SPW
             WHEN spw.is_cost_exception = 1 THEN spw.cost_exception_type
             -- 3. If it's matched but weight/cost are fine
             WHEN spw.shipment_package_id IS NOT NULL THEN 'matched'
-            -- 4. If it's not found in the WIP table
+            -- 4. If it's not found in the shipment_package table
             ELSE 'unknown'
         END AS status
     FROM 
@@ -198,16 +193,16 @@ dbo.charge_types AS ct
         ON ct.charge_type_id = sc.charge_type_id
     JOIN
 dbo.charge_type_category AS ctc
-        ON ctc.id = ct.charge_category_id
+        ON ctc.category_id = ct.charge_category_id
     LEFT JOIN 
 billing.shipment_attributes AS sa
         ON sa.tracking_number = sc.tracking_number
         AND sa.carrier_id = sc.carrier_id
     LEFT JOIN 
-dbo.shipment_package_wip AS spw
+dbo.shipment_package AS spw
         ON spw.tracking_number = sc.tracking_number
     LEFT JOIN 
-dbo.shipment_wip AS sw
+dbo.shipment AS sw
         ON sw.shipment_id = spw.shipment_id
     LEFT JOIN 
 dbo.[order] AS o

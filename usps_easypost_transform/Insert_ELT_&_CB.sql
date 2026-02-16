@@ -145,7 +145,7 @@ BEGIN TRY
     )
     SELECT
         -- Shipment identifiers
-        d.tracking_code,
+        TRIM(d.tracking_code) AS tracking_code,
         
         -- Computed invoice identifiers (same formula as Step 1)
         CONCAT(d.carrier_account_id, '-', FORMAT(CAST(d.created_at AS DATE), 'yyyy-MM-dd')) AS invoice_number,

@@ -43,6 +43,8 @@ SET NOCOUNT ON;
 
 DECLARE @ShippingMethodsAdded INT, @ChargeTypesAdded INT;
 
+BEGIN TRY
+
 /*
 ================================================================================
 Block 1: Synchronize Shipping Methods
@@ -54,7 +56,6 @@ methods into the shipping_method table. Populates with sensible defaults:
 - service_level: Default to 'Standard'
 - guaranteed_delivery: Default to 0 (false)
 - is_active: Default to 1 (true)
-- name_in_bill: NULL (can be updated manually later if needed)
 ================================================================================
 */
 
@@ -63,16 +64,14 @@ INSERT INTO dbo.shipping_method (
     method_name,
     service_level,
     guaranteed_delivery,
-    is_active,
-    name_in_bill
+    is_active
 )
 SELECT DISTINCT
     @Carrier_id AS carrier_id,
     CAST(d.[Service Type] AS varchar(255)) AS method_name,
     'Standard' AS service_level,
     0 AS guaranteed_delivery,
-    1 AS is_active,
-    NULL AS name_in_bill
+    1 AS is_active
 FROM 
 billing.delta_fedex_bill d
 WHERE 
@@ -127,7 +126,29 @@ WHERE
 
 SET @ChargeTypesAdded = @@ROWCOUNT;
 
--- Final single result set for the ADF Debug Window
-SELECT 
-    @ShippingMethodsAdded AS ShippingMethodsAdded, 
-    @ChargeTypesAdded AS ChargeTypesAdded;
+    -- Return success with row counts for ADF monitoring
+    SELECT 
+        'SUCCESS' AS Status,
+        @ShippingMethodsAdded AS ShippingMethodsAdded, 
+        @ChargeTypesAdded AS ChargeTypesAdded;
+
+END TRY
+BEGIN CATCH
+    -- No transaction to rollback - INSERTs are independently idempotent
+    DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+    DECLARE @ErrorLine INT = ERROR_LINE();
+    DECLARE @ErrorNumber INT = ERROR_NUMBER();
+    
+    DECLARE @DetailedError NVARCHAR(4000) = 
+        'FedEx Sync_Reference_Data.sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) + 
+        ' (Error ' + CAST(@ErrorNumber AS NVARCHAR(10)) + '): ' + @ErrorMessage;
+    
+    SELECT 
+        'ERROR' AS Status,
+        @ErrorNumber AS ErrorNumber,
+        @DetailedError AS ErrorMessage,
+        @ErrorLine AS ErrorLine;
+    
+    -- Re-throw with descriptive message
+    THROW 50000, @DetailedError, 1;
+END CATCH;

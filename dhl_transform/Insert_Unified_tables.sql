@@ -115,10 +115,10 @@ BEGIN TRY
     ================================================================================
     DHL uses wide format with 4 fixed charge columns. CROSS APPLY VALUES unpivots
     these into individual charge rows:
-      1. Transportation Cost                 (dhl.transportation_cost)
-      2. Non-Qualified Dimensional Charges   (dhl.non_qualified_dimensional_charges)
-      3. Fuel Surcharge Amount               (dhl.fuel_surcharge_amount)
-      4. Delivery Area Surcharge Amount      (dhl.delivery_area_surcharge_amount)
+      1. Transportation Cost        (dhl.transportation_cost)
+      2. Non-Qualified Dim          (dhl.non_qualified_dimensional_charges)
+      3. Fuel Surcharge             (dhl.fuel_surcharge_amount)
+      4. Delivery Area Surcharge    (dhl.delivery_area_surcharge_amount)
     
     Each charge row links to:
     - charge_types via charge_type_id (looked up by charge_name + carrier_id)
@@ -143,10 +143,10 @@ BEGIN TRY
         FROM 
             billing.dhl_bill dhl
         CROSS APPLY (VALUES
-            (N'Transportation Cost',               dhl.transportation_cost),
-            (N'Non-Qualified Dimensional Charges',  dhl.non_qualified_dimensional_charges),
-            (N'Fuel Surcharge Amount',              dhl.fuel_surcharge_amount),
-            (N'Delivery Area Surcharge Amount',     dhl.delivery_area_surcharge_amount)
+            (N'Transportation Cost',        dhl.transportation_cost),
+            (N'Non-Qualified Dim',          dhl.non_qualified_dimensional_charges),
+            (N'Fuel Surcharge',             dhl.fuel_surcharge_amount),
+            (N'Delivery Area Surcharge',    dhl.delivery_area_surcharge_amount)
         ) AS x(charge_name, amount)
         INNER JOIN 
             dbo.charge_types ct

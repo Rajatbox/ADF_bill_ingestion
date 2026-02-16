@@ -52,8 +52,7 @@ BEGIN TRY
         service_level,
         average_transit_days,
         guaranteed_delivery,
-        is_active,
-        name_in_bill
+        is_active
     )
     SELECT DISTINCT
         @carrier_id AS carrier_id,
@@ -61,8 +60,7 @@ BEGIN TRY
         'Standard' AS service_level,  -- Default service level
         NULL AS average_transit_days,  -- To be configured later
         0 AS guaranteed_delivery,      -- Default false
-        1 AS is_active,
-        ub.charge_description AS name_in_bill
+        1 AS is_active
     FROM
         billing.ups_bill AS ub
     WHERE

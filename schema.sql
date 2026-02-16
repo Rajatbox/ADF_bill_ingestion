@@ -900,15 +900,14 @@ CREATE TABLE billing.carrier_ingestion_tracker (
 -----------------------------------------------------------------------------------------------------------------
 
 CREATE TABLE dbo.shipping_method (
-	shipping_method_id int IDENTITY(1,1) NOT NULL,
-	carrier_id int NOT NULL,
-	method_name varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	service_level varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	average_transit_days decimal(5,2) NULL,
-	guaranteed_delivery bit NOT NULL,
-	is_active bit NOT NULL,
-	name_in_bill varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	CONSTRAINT PK_shipping_method PRIMARY KEY (shipping_method_id)
+	shipping_method_id int NOT NULL,
+	carrier_id int NULL,
+	method_name nvarchar(510) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	service_level nvarchar(510) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	average_transit_days decimal(18,4) NULL,
+	guaranteed_delivery bit NULL,
+	is_active bit NULL,
+	CONSTRAINT PK__shipping__DCF5023B0C181765 PRIMARY KEY (shipping_method_id)
 );
 
 -- Unique constraint: Prevent duplicate shipping methods per carrier
@@ -1011,7 +1010,6 @@ CREATE TABLE dbo.carrier_cost_ledger (
 	shipment_package_id int NULL,
 	carrier_bill_id int NULL,
 	shipment_attribute_id bigint NULL,  -- NEW: Links to physical shipment data for variance calculation
-	is_matched bit DEFAULT 0 NOT NULL,
 	fee_id int NULL,
 	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
 	carrier_invoice_date date NOT NULL,

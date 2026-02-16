@@ -16,14 +16,15 @@ ADF Pipeline Variables Required:
     - ErrorNumber: INT (if error)
     - ErrorMessage: NVARCHAR (if error)
 
-Purpose: Automatically populate and maintain the shipping_method reference table
-         by discovering new values from processed DHL billing data.
-
-         Charge types are NOT synced here — DHL is a wide deterministic format
-         with 4 fixed charge columns. Charge types should be seeded once.
+Purpose: Automatically populate and maintain reference tables by discovering
+         new values from processed DHL billing data.
+         
+         Block 1: Sync shipping_method (discovered from data)
+         Block 2: ONE-TIME SEED of 4 fixed DHL charge types (static)
 
 Source:  billing.dhl_bill (for shipping methods - discovered from data)
-Target:  dbo.shipping_method
+Targets: dbo.shipping_method
+         dbo.charge_types (one-time seed of 4 fixed charges)
 
 Execution Order: THIRD in pipeline (after Insert_ELT_&_CB.sql completes).
                  This ensures reference data is discovered from validated bills only.
@@ -40,7 +41,7 @@ BEGIN TRY
 
 /*
 ================================================================================
-Synchronize Shipping Methods
+Block 1: Synchronize Shipping Methods
 ================================================================================
 Discovers distinct shipping methods from dhl_bill and inserts any new
 methods into the shipping_method table. Populates with sensible defaults:
@@ -49,7 +50,6 @@ methods into the shipping_method table. Populates with sensible defaults:
 - service_level: Default to 'Standard'
 - guaranteed_delivery: Default to 0 (false)
 - is_active: Default to 1 (true)
-- name_in_bill: NULL (can be updated manually later if needed)
 
 Examples: 'DHL Parcel International Standard', 'DHL Parcel International Direct'
 ================================================================================
@@ -60,16 +60,14 @@ INSERT INTO dbo.shipping_method (
     method_name,
     service_level,
     guaranteed_delivery,
-    is_active,
-    name_in_bill
+    is_active
 )
 SELECT DISTINCT
     @Carrier_id AS carrier_id,
     CAST(dhl.shipping_method AS varchar(255)) AS method_name,
     'Standard' AS service_level,
     0 AS guaranteed_delivery,
-    1 AS is_active,
-    NULL AS name_in_bill
+    1 AS is_active
 FROM 
     billing.dhl_bill dhl
 WHERE 
@@ -85,6 +83,44 @@ WHERE
 
 SET @ShippingMethodsAdded = @@ROWCOUNT;
 
+/*
+================================================================================
+ONE-TIME SEED: Synchronize Charge Types (DHL Fixed Charges)
+================================================================================
+DHL has a wide deterministic format with 4 fixed charge columns:
+- Transportation Cost (freight)
+- Non-Qualified Dim
+- Fuel Surcharge
+- Delivery Area Surcharge
+
+This block seeds these static charge types if they don't exist.
+After first run, this will no-op due to NOT EXISTS check.
+
+Note: All DHL charge types default to charge_category_id = 11 (Other)
+================================================================================
+
+
+INSERT INTO dbo.charge_types (
+    carrier_id,
+    charge_name,
+    freight,
+    charge_category_id  -- FK to dbo.charge_type_category.id
+)
+SELECT charge_data.carrier_id, charge_data.charge_name, charge_data.freight, charge_data.charge_category_id
+FROM (
+    VALUES 
+        (@Carrier_id, 'Transportation Cost', 1, 15),  -- Freight charge
+        (@Carrier_id, 'Non-Qualified Dim', 0, 12),
+        (@Carrier_id, 'Fuel Surcharge', 0, 8),
+        (@Carrier_id, 'Delivery Area Surcharge', 0, 4)
+) AS charge_data(carrier_id, charge_name, freight, charge_category_id)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM dbo.charge_types ct
+    WHERE ct.charge_name = charge_data.charge_name
+        AND ct.carrier_id = @Carrier_id
+);
+*/
     -- Return success with row counts for ADF monitoring
     SELECT 
         'SUCCESS' AS Status,

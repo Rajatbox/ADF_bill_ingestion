@@ -139,11 +139,11 @@ BEGIN TRY
         CAST(d.invoice_number AS nvarchar(50)) AS invoice_number,
         CAST(NULLIF(TRIM(d.invoice_date), '') AS date) AS invoice_date,
         CAST(NULLIF(TRIM(d.shipping_date), '') AS date) AS shipping_date,
-        -- Col 12: International tracking number as-is
-        CAST(d.international_tracking_number AS nvarchar(255)),
-        -- Col 13: Domestic tracking = '420' + first 5 digits of zip + unique_id
+        -- Col 12: International tracking number as-is (TRIM to remove whitespace)
+        TRIM(CAST(d.international_tracking_number AS nvarchar(255))),
+        -- Col 13: Domestic tracking = '420' + first 5 digits of zip + unique_id (TRIM unique_id)
         '420' + LEFT(REPLACE(CAST(d.recipient_zip_postal_code AS varchar(50)), ' ', ''), 5)
-             + CAST(d.domestic_tracking_number AS varchar(255)) AS domestic_tracking_number,
+             + TRIM(CAST(d.domestic_tracking_number AS varchar(255))) AS domestic_tracking_number,
         CAST(d.recipient_zip_postal_code AS nvarchar(255)),
         CAST(d.recipient_country AS nvarchar(10)),
         CAST(d.shipping_method AS nvarchar(350)),
