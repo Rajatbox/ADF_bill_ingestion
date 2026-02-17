@@ -2,11 +2,16 @@
 ================================================================================
 Eliteworks Integration - Validation Test Query
 ================================================================================
-Purpose: Validates that the total charges in shipment_charges table match
-         the expected total from the source CSV file.
+Purpose: Validates that the 'Platform Charged' amounts in shipment_charges table 
+         match the expected total from the source CSV file.
 
-Test: File Total vs Charges Total
+Test: File Total vs Platform Charged Total
 Expected Result: Difference < $0.01 (accounting for rounding)
+
+Note: Eliteworks stores 3 separate charge types:
+      - Base Rate: Base carrier charge
+      - Store Markup: Platform markup charge  
+      - Platform Charged: Final billed amount (validation target)
 
 Usage: Run after Insert_Unified_tables.sql completes successfully.
        Replace @Carrier_id with actual Eliteworks carrier_id value.
@@ -22,7 +27,10 @@ Validation Query: File Total vs Charges Total
 ================================================================================
 Compares:
   - Expected: Sum of platform_charged_with_corrections from CSV (delta table)
-  - Actual: Sum of shipment_charges.amount for Eliteworks shipments
+  - Actual: Sum of 'Platform Charged' charge type from shipment_charges
+  
+Note: The 'Platform Charged' charge type stores the final billed amount directly.
+      Base Rate and Store Markup are also stored separately for analytics.
 
 Pass Criteria: ABS(expected - actual) < 0.01
 ================================================================================
@@ -125,7 +133,7 @@ SELECT
     'Charge Type Seeding' AS test_name,
     COUNT(*) AS actual_charge_types,
     CASE 
-        WHEN COUNT(*) = 3 THEN '✅ PASS (Expected 3: Base Rate, Store Markup, Correction)' 
+        WHEN COUNT(*) = 3 THEN '✅ PASS (Expected 3: Base Rate, Store Markup, Platform Charged)' 
         ELSE '❌ FAIL (Expected 3 charge types)' 
     END AS result
 FROM dbo.charge_types
@@ -149,12 +157,12 @@ Expected Results Summary
 ================================================================================
 Test 1: File Total vs Charges Total
   - Expected: PASS (difference < $0.01)
-  - Validates: CROSS APPLY unpivot logic correctly sums to Platform Charged
+  - Validates: 'Platform Charged' charge type correctly stores the final billed amount
 
 Test 2: Charge Breakdown
-  - Expected: 3 charge types (Base Rate, Store Markup, Correction)
+  - Expected: 3 charge types (Base Rate, Store Markup, Platform Charged)
   - Base Rate should have freight=1, others freight=0
-  - Correction should have charge_category_id=16 (Adjustment), others=11 (Other)
+  - All charge types should have charge_category_id=11 (Other)
 
 Test 3: Shipment Count
   - Expected: PASS (equal counts)

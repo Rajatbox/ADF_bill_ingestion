@@ -21,12 +21,12 @@ Purpose: ONE-TIME seed of Eliteworks charge types into dbo.charge_types.
 Charge Types (Option 1 - Carrier Cost Focus):
 - Base Rate (freight=1) - The base carrier charge ([Charged] column)
 - Store Markup - Platform markup charge ([Store Markup] column)
-- Correction - Discrepancy/adjustment charge (calculated difference)
+- Platform Charged - Final billed amount ([Platform Charged] column)
 
 Charge Category Mapping (Design Constraint #11):
 - Base Rate → charge_category_id = 11 (Other)
 - Store Markup → charge_category_id = 11 (Other)
-- Correction → charge_category_id = 16 (Adjustment)
+- Platform Charged → charge_category_id = 11 (Other)
 
 Note: No carrier prefix in charge names (consistent with USPS EasyPost pattern)
 
@@ -64,7 +64,7 @@ BEGIN TRY
         VALUES 
             (@Carrier_id, 'Base Rate', 1, 11),         -- Freight charge (Other category)
             (@Carrier_id, 'Store Markup', 0, 11),      -- Markup charge (Other category)
-            (@Carrier_id, 'Correction', 0, 16)         -- Adjustment charge (Adjustment category)
+            (@Carrier_id, 'Platform Charged', 0, 11)   -- Final billed amount (Other category)
     ) AS charge_data(carrier_id, charge_name, freight, charge_category_id)
     WHERE NOT EXISTS (
         SELECT 1
@@ -115,7 +115,7 @@ Design Constraints Applied
 ================================================================================
 ✅ #4  - Idempotency via NOT EXISTS with carrier_id
 ✅ #8  - Returns Status, ChargeTypesAdded
-✅ #11 - Charge categories: Other (11) for Base Rate/Markup, Adjustment (16) for Correction
+✅ #11 - Charge categories: Other (11) for Base Rate/Markup/Platform Charged
 ✅ #11 - Freight flag = 1 for 'Base Rate' only
 ================================================================================
 */

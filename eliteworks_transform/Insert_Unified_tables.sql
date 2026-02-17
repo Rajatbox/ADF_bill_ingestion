@@ -36,7 +36,7 @@ View:     billing.vw_shipment_summary (calculated billed_shipping_cost)
 Charge Structure: Eliteworks has 3 charge types unpivoted via CROSS APPLY:
          1. Base Rate (charged_amount column) - freight=1, category_id=11
          2. Store Markup (store_markup column) - freight=0, category_id=11
-         3. Correction (platform_charged - (charged_amount + store_markup)) - freight=0, category_id=16
+         3. Platform Charged (platform_charged column) - freight=0, category_id=11
 
 Idempotency: - Part 1: NOT EXISTS check + UNIQUE constraint prevents duplicate attributes
              - Part 2: NOT EXISTS check + UNIQUE constraint prevents duplicate charges
@@ -131,12 +131,12 @@ BEGIN TRY
     Charge Types (Option 1 - Carrier Cost Focus):
     1. Base Rate - The base carrier charge (charged_amount column)
     2. Store Markup - Platform markup charge (store_markup column)
-    3. Correction - Discrepancy/adjustment charge (platform_charged - (charged_amount + store_markup))
+    3. Platform Charged - Final billed amount (platform_charged column)
     
     Charge Category (Design Constraint #11):
     - Base Rate → charge_category_id = 11 (Other)
     - Store Markup → charge_category_id = 11 (Other)
-    - Correction → charge_category_id = 16 (Adjustment)
+    - Platform Charged → charge_category_id = 11 (Other)
     
     Freight Flag:
     - 'Base Rate' has freight = 1 (primary shipping charge)
@@ -179,7 +179,7 @@ BEGIN TRY
         VALUES 
             ('Base Rate', e.charged_amount),
             ('Store Markup', e.store_markup),
-            ('Correction', e.platform_charged - (e.charged_amount + e.store_markup))
+            ('Platform Charged', e.platform_charged)
     ) AS charges(charge_name, amount)
     -- Join to get charge_type_id
     INNER JOIN dbo.charge_types ct 
@@ -256,15 +256,15 @@ Design Constraints Applied
 ✅ #7  - No unit conversion needed (weight in OZ, dimensions in IN)
 ✅ #8  - Returns Status, AttributesInserted, ChargesInserted
 ✅ #9  - Narrow format: 3 charges unpivoted via CROSS APPLY
-✅ #11 - Charge categories: Other (11) for Base Rate/Markup, Adjustment (16) for Correction
+✅ #11 - Charge categories: Other (11) for Base Rate/Markup/Platform Charged
 ✅ #11 - Freight flag = 1 for 'Base Rate' only
 ================================================================================
 
 Notes:
 - Eliteworks data is already in correct units (OZ for weight, IN for dimensions)
-- Correction charge calculated as (platform_charged - (charged_amount + store_markup))
+- Platform Charged stores the final billed amount directly (no calculation)
 - Negative charges included (<> 0) to handle refunds and adjustments
 - All 3 charge types synced in Sync_Reference_Data.sql before this script runs
-- Reconciliation target: SUM(charges) = platform_charged per shipment
+- Platform Charged represents the total amount billed to customer
 ================================================================================
 */
