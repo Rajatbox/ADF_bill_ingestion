@@ -77,6 +77,7 @@ billing.shipment_attributes AS sa
         ON spw.tracking_number = sa.tracking_number
     WHERE 
         sa.created_date > @lastrun
+        AND sa.carrier_id = @carrier_id
         AND NULLIF(sa.tracking_number, '') IS NOT NULL;
 
     SET @ShipmentsUpdated = @@ROWCOUNT;
@@ -115,6 +116,7 @@ dbo.shipping_method AS sm
         AND sm.carrier_id = vss.carrier_id
     WHERE 
         vss.created_date > @lastrun
+        AND vss.carrier_id = @carrier_id
         AND NULLIF(vss.tracking_number, '') IS NOT NULL;
 
     SET @PackagesUpdated = @@ROWCOUNT;
@@ -209,6 +211,7 @@ dbo.[order] AS o
         ON o.order_id = sw.order_id
     WHERE 
         sc.created_date > @lastrun
+        AND sc.carrier_id = @carrier_id
         AND NOT EXISTS (
             SELECT 1
             FROM dbo.carrier_cost_ledger AS ccl

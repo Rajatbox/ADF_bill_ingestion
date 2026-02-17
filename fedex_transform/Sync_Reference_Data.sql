@@ -68,19 +68,18 @@ INSERT INTO dbo.shipping_method (
 )
 SELECT DISTINCT
     @Carrier_id AS carrier_id,
-    CAST(d.[Service Type] AS varchar(255)) AS method_name,
+    NULLIF(TRIM(d.[Service Type]), '') AS method_name,
     'Standard' AS service_level,
     0 AS guaranteed_delivery,
     1 AS is_active
 FROM 
 billing.delta_fedex_bill d
 WHERE 
-    d.[Service Type] IS NOT NULL
-    AND NULLIF(TRIM(CAST(d.[Service Type] AS varchar)), '') IS NOT NULL
+    NULLIF(TRIM(d.[Service Type]), '') IS NOT NULL
     AND NOT EXISTS (
         SELECT 1
         FROM dbo.shipping_method sm
-        WHERE sm.method_name = CAST(d.[Service Type] AS varchar(255))
+        WHERE sm.method_name = NULLIF(TRIM(d.[Service Type]), '')
             AND sm.carrier_id = @Carrier_id
     );
 
@@ -106,21 +105,20 @@ INSERT INTO dbo.charge_types (
 )
 SELECT DISTINCT
     @Carrier_id AS carrier_id,
-    CAST(v.charge_type AS varchar(255)) AS charge_name,
+    NULLIF(TRIM(v.charge_type), '') AS charge_name,
     CASE 
-        WHEN LOWER(v.charge_type) LIKE '%adjustment%' THEN 16  -- FK to charge_type_category
+        WHEN LOWER(NULLIF(TRIM(v.charge_type), '')) LIKE '%adjustment%' THEN 16  -- FK to charge_type_category
         ELSE 11  -- FK to charge_type_category
     END AS charge_category_id
 FROM 
 billing.vw_FedExCharges v
 WHERE 
     v.created_date > @lastrun
-    AND v.charge_type IS NOT NULL
     AND NULLIF(TRIM(v.charge_type), '') IS NOT NULL
     AND NOT EXISTS (
         SELECT 1
         FROM dbo.charge_types ct
-        WHERE ct.charge_name = CAST(v.charge_type AS varchar(255))
+        WHERE ct.charge_name = NULLIF(TRIM(v.charge_type), '')
             AND ct.carrier_id = @Carrier_id
     );
 
