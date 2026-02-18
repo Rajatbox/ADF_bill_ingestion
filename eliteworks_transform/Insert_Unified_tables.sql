@@ -20,7 +20,7 @@ ADF Pipeline Variables Required:
 
 Purpose: Two-part idempotent population script:
          PART 1: INSERT shipment_attributes (one row per tracking number)
-         PART 2: INSERT shipment_charges (1-3 rows per tracking number via CROSS APPLY)
+         PART 2: INSERT shipment_charges (one row per tracking number)
          
          Cost Calculation: billed_shipping_cost is NOT stored in shipment_attributes.
          It's calculated on-the-fly via vw_shipment_summary view from shipment_charges
@@ -33,10 +33,13 @@ Targets:  billing.shipment_attributes (business key: carrier_id + tracking_numbe
 Joins:    dbo.charge_types (charge_type_id lookup)
 View:     billing.vw_shipment_summary (calculated billed_shipping_cost)
 
-Charge Structure: Eliteworks has 3 charge types unpivoted via CROSS APPLY:
-         1. Base Rate (charged_amount column) - freight=1, category_id=11
-         2. Store Markup (store_markup column) - freight=0, category_id=11
-         3. Platform Charged (platform_charged column) - freight=0, category_id=11
+Charge Structure: Eliteworks stores 1 charge per shipment:
+         - Platform Charged (platform_charged column) - freight=0, category_id=11
+         
+         Platform Charged is the authoritative billed amount (includes Base Rate + 
+         Store Markup with corrections). Base Rate and Store Markup are preserved 
+         in eliteworks_bill for audit but NOT stored in shipment_charges to avoid 
+         double-counting.
 
 Idempotency: - Part 1: NOT EXISTS check + UNIQUE constraint prevents duplicate attributes
              - Part 2: NOT EXISTS check + UNIQUE constraint prevents duplicate charges
@@ -47,7 +50,7 @@ Execution Order: FOURTH in pipeline (after Sync_Reference_Data.sql completes).
                  Part 2 depends on Part 1 for shipment_attribute_id lookup.
 
 Business Key: shipment_attributes.id (IDENTITY) represents unique carrier_id + tracking_number
-              One shipment_attributes row can have many shipment_charges rows (1-to-Many)
+              One shipment_attributes row maps to one shipment_charges row for Eliteworks.
 
 No Transaction: Each INSERT is independently idempotent via unique constraints
 ================================================================================
@@ -126,31 +129,24 @@ BEGIN TRY
     ================================================================================
     PART 2: INSERT Shipment Charges
     ================================================================================
-    Unpivots 3 charge types from eliteworks_bill using CROSS APPLY.
+    Inserts one charge per shipment using platform_charged as the amount.
     
-    Charge Types (Option 1 - Carrier Cost Focus):
-    1. Base Rate - The base carrier charge (charged_amount column)
-    2. Store Markup - Platform markup charge (store_markup column)
-    3. Platform Charged - Final billed amount (platform_charged column)
+    Platform Charged is the authoritative billed amount per shipment. It already
+    includes Base Rate + Store Markup (with corrections applied). Storing only
+    Platform Charged ensures SUM(shipment_charges.amount) = carrier_bill.total_amount
+    without double-counting.
+    
+    Base Rate and Store Markup are preserved in eliteworks_bill for audit/reporting.
     
     Charge Category (Design Constraint #11):
-    - Base Rate → charge_category_id = 11 (Other)
-    - Store Markup → charge_category_id = 11 (Other)
     - Platform Charged → charge_category_id = 11 (Other)
     
-    Freight Flag:
-    - 'Base Rate' has freight = 1 (primary shipping charge)
-    - All others have freight = 0
-    
-    Reconciliation Target: platform_charged column (final billed amount)
-    - Sum of all 3 charges should equal platform_charged per shipment
-    
-    Negative Charges: Included (uses <> 0 check)
-    - Handles refunds and adjustments
+    Zero/Negative Charges: Included (no amount filter)
+    - Handles $0 shipments, refunds, and adjustments
     
     Foreign Keys:
     - shipment_attribute_id: Lookup via (carrier_id, tracking_number)
-    - charge_type_id: Lookup via (carrier_id, charge_name)
+    - charge_type_id: Lookup via (carrier_id, charge_name = 'Platform Charged')
     - carrier_bill_id: From eliteworks_bill
     
     Idempotency: UNIQUE constraint on (carrier_bill_id, tracking_number, charge_type_id)
@@ -170,20 +166,13 @@ BEGIN TRY
         e.carrier_bill_id,
         e.tracking_number AS tracking_number,
         ct.charge_type_id,
-        charges.amount,
+        e.platform_charged AS amount,
         sa.id AS shipment_attribute_id
     FROM
         billing.eliteworks_bill e
-    -- Unpivot 3 charge types using CROSS APPLY
-    CROSS APPLY (
-        VALUES 
-            ('Base Rate', e.charged_amount),
-            ('Store Markup', e.store_markup),
-            ('Platform Charged', e.platform_charged)
-    ) AS charges(charge_name, amount)
-    -- Join to get charge_type_id
+    -- Join to get charge_type_id for 'Platform Charged'
     INNER JOIN dbo.charge_types ct 
-        ON ct.charge_name = charges.charge_name 
+        ON ct.charge_name = 'Platform Charged'
         AND ct.carrier_id = @Carrier_id
     -- Join to get shipment_attribute_id
     INNER JOIN billing.shipment_attributes sa 
@@ -194,14 +183,12 @@ BEGIN TRY
         AND e.carrier_bill_id IS NOT NULL
         AND e.tracking_number IS NOT NULL
         AND NULLIF(TRIM(e.tracking_number), '') IS NOT NULL
-        -- Only insert non-zero charges (includes negative for refunds/adjustments)
-        AND charges.amount <> 0
-        -- Idempotency: Check by carrier_bill_id + shipment_attribute_id + charge_type_id
+        -- Idempotency: Check by carrier_bill_id + tracking_number + charge_type_id
         AND NOT EXISTS (
             SELECT 1
             FROM billing.shipment_charges sc
             WHERE sc.carrier_bill_id = e.carrier_bill_id
-                AND sc.shipment_attribute_id = sa.id
+                AND sc.tracking_number = e.tracking_number
                 AND sc.charge_type_id = ct.charge_type_id
         );
 
@@ -255,16 +242,14 @@ Design Constraints Applied
 ✅ #6  - Cost NOT stored in shipment_attributes (calculated via view)
 ✅ #7  - No unit conversion needed (weight in OZ, dimensions in IN)
 ✅ #8  - Returns Status, AttributesInserted, ChargesInserted
-✅ #9  - Narrow format: 3 charges unpivoted via CROSS APPLY
-✅ #11 - Charge categories: Other (11) for Base Rate/Markup/Platform Charged
-✅ #11 - Freight flag = 1 for 'Base Rate' only
+✅ #11 - Charge category: Other (11) for Platform Charged
 ================================================================================
 
 Notes:
 - Eliteworks data is already in correct units (OZ for weight, IN for dimensions)
-- Platform Charged stores the final billed amount directly (no calculation)
-- Negative charges included (<> 0) to handle refunds and adjustments
-- All 3 charge types synced in Sync_Reference_Data.sql before this script runs
-- Platform Charged represents the total amount billed to customer
+- Only Platform Charged is stored in shipment_charges (the authoritative billed amount)
+- Base Rate and Store Markup are preserved in eliteworks_bill for audit/reporting
+- Zero and negative charges are included (handles $0 shipments, refunds, adjustments)
+- SUM(shipment_charges.amount) = carrier_bill.total_amount (no double-counting)
 ================================================================================
 */

@@ -8,10 +8,9 @@ Purpose: Validates that the 'Platform Charged' amounts in shipment_charges table
 Test: File Total vs Platform Charged Total
 Expected Result: Difference < $0.01 (accounting for rounding)
 
-Note: Eliteworks stores 3 separate charge types:
-      - Base Rate: Base carrier charge
-      - Store Markup: Platform markup charge  
-      - Platform Charged: Final billed amount (validation target)
+Note: Eliteworks stores only 'Platform Charged' in shipment_charges.
+      Base Rate and Store Markup are preserved in eliteworks_bill for audit
+      but excluded from shipment_charges to avoid double-counting.
 
 Usage: Run after Insert_Unified_tables.sql completes successfully.
        Replace @Carrier_id with actual Eliteworks carrier_id value.
@@ -27,10 +26,10 @@ Validation Query: File Total vs Charges Total
 ================================================================================
 Compares:
   - Expected: Sum of platform_charged_with_corrections from CSV (delta table)
-  - Actual: Sum of 'Platform Charged' charge type from shipment_charges
+  - Actual: Sum of all charges from shipment_charges (only Platform Charged is stored)
   
-Note: The 'Platform Charged' charge type stores the final billed amount directly.
-      Base Rate and Store Markup are also stored separately for analytics.
+Note: SUM(shipment_charges.amount) = carrier_bill.total_amount since only
+      Platform Charged is stored as a charge type.
 
 Pass Criteria: ABS(expected - actual) < 0.01
 ================================================================================
@@ -71,7 +70,7 @@ FROM file_total f, charges_total c;
 ================================================================================
 Additional Validation: Charge Breakdown by Type
 ================================================================================
-Shows distribution of charges by type to verify CROSS APPLY unpivot logic
+Shows distribution of charges by type (expects only Platform Charged)
 ================================================================================
 */
 
@@ -125,7 +124,7 @@ FROM eliteworks_shipments es, unified_shipments us;
 ================================================================================
 Additional Validation: Charge Type Seeding
 ================================================================================
-Verifies that all 3 expected charge types exist for Eliteworks
+Verifies that the expected charge type exists for Eliteworks
 ================================================================================
 */
 
@@ -133,8 +132,8 @@ SELECT
     'Charge Type Seeding' AS test_name,
     COUNT(*) AS actual_charge_types,
     CASE 
-        WHEN COUNT(*) = 3 THEN '✅ PASS (Expected 3: Base Rate, Store Markup, Platform Charged)' 
-        ELSE '❌ FAIL (Expected 3 charge types)' 
+        WHEN COUNT(*) = 1 THEN '✅ PASS (Expected 1: Platform Charged)' 
+        ELSE '❌ FAIL (Expected 1 charge type: Platform Charged)' 
     END AS result
 FROM dbo.charge_types
 WHERE carrier_id = @Carrier_id;
@@ -157,25 +156,24 @@ Expected Results Summary
 ================================================================================
 Test 1: File Total vs Charges Total
   - Expected: PASS (difference < $0.01)
-  - Validates: 'Platform Charged' charge type correctly stores the final billed amount
+  - Validates: SUM(shipment_charges.amount) = SUM(platform_charged_with_corrections)
 
 Test 2: Charge Breakdown
-  - Expected: 3 charge types (Base Rate, Store Markup, Platform Charged)
-  - Base Rate should have freight=1, others freight=0
-  - All charge types should have charge_category_id=11 (Other)
+  - Expected: 1 charge type (Platform Charged)
+  - Platform Charged: freight=0, charge_category_id=11 (Other)
 
 Test 3: Shipment Count
   - Expected: PASS (equal counts)
   - Validates: All shipments from normalized table reached unified table
 
 Test 4: Charge Type Seeding
-  - Expected: PASS (exactly 3 charge types)
-  - Validates: Sync_Reference_Data.sql seeded correctly
+  - Expected: PASS (exactly 1 charge type: Platform Charged)
+  - Validates: Insert_Charge_Types.sql seeded correctly
 
 If any test fails:
   1. Check Insert_ELT_&_CB.sql for transaction rollback
-  2. Verify Sync_Reference_Data.sql ran successfully
-  3. Review Insert_Unified_tables.sql CROSS APPLY logic
+  2. Verify Insert_Charge_Types.sql ran before pipeline
+  3. Review Insert_Unified_tables.sql charge insertion logic
   4. Check for NULL tracking numbers filtered correctly
 ================================================================================
 */

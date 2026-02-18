@@ -14,18 +14,17 @@ ADF Pipeline Variables Required:
     - ErrorNumber: INT (if error)
     - ErrorMessage: NVARCHAR (if error)
 
-Purpose: ONE-TIME seed of Eliteworks charge types into dbo.charge_types.
+Purpose: ONE-TIME seed of Eliteworks charge type into dbo.charge_types.
          This should be run once during initial setup before the main pipeline.
          After first successful run, this script will no-op (NOT EXISTS prevents duplicates).
 
-Charge Types (Option 1 - Carrier Cost Focus):
-- Base Rate (freight=1) - The base carrier charge ([Charged] column)
-- Store Markup - Platform markup charge ([Store Markup] column)
-- Platform Charged - Final billed amount ([Platform Charged] column)
+Charge Type:
+- Platform Charged (freight=0) - Final billed amount ([Platform Charged (With Corrections)] column)
+  This is the authoritative total per shipment. It already includes Base Rate + Store Markup.
+  Base Rate and Store Markup are preserved in eliteworks_bill for audit/reporting
+  but are NOT stored as separate charges in shipment_charges to avoid double-counting.
 
 Charge Category Mapping (Design Constraint #11):
-- Base Rate → charge_category_id = 11 (Other)
-- Store Markup → charge_category_id = 11 (Other)
 - Platform Charged → charge_category_id = 11 (Other)
 
 Note: No carrier prefix in charge names (consistent with USPS EasyPost pattern)
@@ -45,9 +44,13 @@ BEGIN TRY
 
     /*
     ================================================================================
-    Insert Charge Types (Eliteworks Fixed Charges)
+    Insert Charge Type (Eliteworks Single Charge)
     ================================================================================
-    Seeds 3 static charge types for Eliteworks carrier.
+    Seeds 1 charge type for Eliteworks carrier: Platform Charged.
+    
+    Platform Charged is the authoritative billed amount per shipment.
+    Base Rate and Store Markup are component breakdowns preserved in 
+    eliteworks_bill for audit, but NOT stored in shipment_charges.
     
     After first run, this will no-op due to NOT EXISTS check.
     ================================================================================
@@ -62,8 +65,6 @@ BEGIN TRY
     SELECT charge_data.carrier_id, charge_data.charge_name, charge_data.freight, charge_data.charge_category_id
     FROM (
         VALUES 
-            (@Carrier_id, 'Base Rate', 1, 11),         -- Freight charge (Other category)
-            (@Carrier_id, 'Store Markup', 0, 11),      -- Markup charge (Other category)
             (@Carrier_id, 'Platform Charged', 0, 11)   -- Final billed amount (Other category)
     ) AS charge_data(carrier_id, charge_name, freight, charge_category_id)
     WHERE NOT EXISTS (
@@ -115,7 +116,10 @@ Design Constraints Applied
 ================================================================================
 ✅ #4  - Idempotency via NOT EXISTS with carrier_id
 ✅ #8  - Returns Status, ChargeTypesAdded
-✅ #11 - Charge categories: Other (11) for Base Rate/Markup/Platform Charged
-✅ #11 - Freight flag = 1 for 'Base Rate' only
+✅ #11 - Charge category: Other (11) for Platform Charged
+
+Note: Only Platform Charged is seeded. Base Rate and Store Markup are preserved
+      in eliteworks_bill for audit but excluded from shipment_charges to prevent
+      double-counting (Platform Charged = Base Rate + Store Markup).
 ================================================================================
 */
