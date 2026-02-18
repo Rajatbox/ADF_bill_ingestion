@@ -1,15 +1,13 @@
 /*
 ================================================================================
-Reference Data Synchronization Script
+Reference Data Synchronization Script (File-Based Filtering)
 ================================================================================
 Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier identifier from LookupCarrierInfo activity
-                         Used to associate new charge types with correct carrier
-    - @lastrun: DATETIME2 - Last successful run timestamp for incremental processing
-                            Filters created_date to process only new/updated records
+    - @Carrier_id: INT - Carrier identifier from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -24,11 +22,16 @@ Purpose: Automatically populate and maintain reference/lookup tables by
          Block 1: Sync shipping_method table with new service types
          Block 2: Sync charge_types table with new charge descriptions
 
-Source:  billing.delta_fedex_bill (for service types)
-billing.vw_FedExCharges (for charge types)
+File-Based Filtering: Uses @File_id to process only the current file's data:
+         - Isolates reference discovery to specific file being processed
+         - Prevents cross-file contamination during parallel processing
+         - Enables reliable retry of failed files
+
+Source:  billing.fedex_bill (normalized) + carrier_bill JOIN for file_id filtering
+         billing.vw_FedExCharges (view includes file_id for filtering)
          
 Targets: dbo.shipping_method
-dbo.charge_types
+         dbo.charge_types
 
 Execution Order: THIRD in pipeline (after Insert_ELT_&_CB.sql completes).
                  This ensures reference data is discovered from validated bills only.
@@ -49,13 +52,15 @@ BEGIN TRY
 ================================================================================
 Block 1: Synchronize Shipping Methods
 ================================================================================
-Discovers distinct service types from delta_fedex_bill and inserts any new
-methods into the shipping_method table. Populates with sensible defaults:
+Discovers distinct service types from fedex_bill (normalized table) and inserts
+any new methods into the shipping_method table. Populates with sensible defaults:
 - carrier_id: From @Carrier_id parameter
 - method_name: The actual service type from FedEx data
 - service_level: Default to 'Standard'
 - guaranteed_delivery: Default to 0 (false)
 - is_active: Default to 1 (true)
+
+Uses file_id filtering to process only the current file's data.
 ================================================================================
 */
 
@@ -68,18 +73,20 @@ INSERT INTO dbo.shipping_method (
 )
 SELECT DISTINCT
     @Carrier_id AS carrier_id,
-    NULLIF(TRIM(d.[Service Type]), '') AS method_name,
+    NULLIF(TRIM(fb.service_type), '') AS method_name,
     'Standard' AS service_level,
     0 AS guaranteed_delivery,
     1 AS is_active
 FROM 
-billing.delta_fedex_bill d
+billing.fedex_bill fb
+JOIN billing.carrier_bill cb ON cb.carrier_bill_id = fb.carrier_bill_id
 WHERE 
-    NULLIF(TRIM(d.[Service Type]), '') IS NOT NULL
+    cb.file_id = @File_id
+    AND NULLIF(TRIM(fb.service_type), '') IS NOT NULL
     AND NOT EXISTS (
         SELECT 1
         FROM dbo.shipping_method sm
-        WHERE sm.method_name = NULLIF(TRIM(d.[Service Type]), '')
+        WHERE sm.method_name = NULLIF(TRIM(fb.service_type), '')
             AND sm.carrier_id = @Carrier_id
     );
 
@@ -113,7 +120,7 @@ SELECT DISTINCT
 FROM 
 billing.vw_FedExCharges v
 WHERE 
-    v.created_date > @lastrun
+    v.file_id = @File_id  -- NEW: File-based filtering (replaces created_date > @lastrun)
     AND NULLIF(TRIM(v.charge_type), '') IS NOT NULL
     AND NOT EXISTS (
         SELECT 1

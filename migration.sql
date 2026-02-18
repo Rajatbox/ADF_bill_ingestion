@@ -1,19 +1,42 @@
-/*
-================================================================================
-View: FedEx Charges Unpivot (Wide to Narrow Format)
-================================================================================
-Purpose: Unpivots FedEx bill wide format (50+ charge description/amount columns)
-         into narrow format for easier processing.
+CREATE TABLE billing.file_ingestion_tracker (
+	file_id int IDENTITY(1,1) NOT NULL,
+	file_name varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	carrier_id int NOT NULL,
+	created_at datetime2 DEFAULT sysdatetime() NOT NULL,
+	completed_at datetime2 NULL,  -- NULL = in progress/failed/retry, NOT NULL = completed
+	CONSTRAINT PK_file_ingestion_tracker PRIMARY KEY (file_id),
+	CONSTRAINT FK_file_ingestion_tracker_carrier FOREIGN KEY (carrier_id) 
+		REFERENCES dbo.carrier(carrier_id),
+	CONSTRAINT UQ_file_ingestion_tracker_file_carrier UNIQUE (file_name, carrier_id)
+);
 
-Usage: Used by Sync_Reference_Data.sql and Insert_Unified_tables.sql
-       Filtered by file_id to process only current file's charges
+-- Index for completion queries
+CREATE NONCLUSTERED INDEX IX_file_ingestion_tracker_completed
+ON billing.file_ingestion_tracker (carrier_id, completed_at);
 
-Design: Uses OUTER APPLY to unpivot charge description/amount pairs
-        Joins carrier_bill to expose file_id for file-based filtering
-        
-Output: One row per charge per tracking number (narrow format)
-================================================================================
-*/
+
+-----------Carrier Bill Table-----------
+
+-- Add file_id column to track which file each invoice came from
+ALTER TABLE billing.carrier_bill 
+ADD file_id INT NULL;
+
+-- Foreign key to file_ingestion_tracker
+ALTER TABLE billing.carrier_bill 
+ADD CONSTRAINT FK_carrier_bill_file_ingestion 
+FOREIGN KEY (file_id) REFERENCES billing.file_ingestion_tracker(file_id);
+
+-- Index for file-based filtering (one file can have MANY invoices)
+CREATE NONCLUSTERED INDEX IX_carrier_bill_file_id
+ON billing.carrier_bill (file_id);
+
+
+-----------FedEx Charges View-----------
+
+-- Update view to include file_id for file-based filtering
+DROP VIEW IF EXISTS billing.vw_FedExCharges;
+GO
+
 CREATE VIEW billing.vw_FedExCharges
 AS
 SELECT
@@ -84,3 +107,6 @@ OUTER APPLY (
 WHERE NULLIF(v.charge_type, '') IS NOT NULL
   AND v.charge_amount IS NOT NULL
   AND v.charge_amount <> 0;
+GO
+
+

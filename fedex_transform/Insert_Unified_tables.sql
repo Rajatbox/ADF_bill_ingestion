@@ -6,9 +6,8 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier identifier from LookupCarrierInfo activity
-    - @lastrun: DATETIME2 - Last successful run timestamp for incremental processing
-                            Filters created_date to process only new/updated records
+    - @Carrier_id: INT - Carrier identifier from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -36,17 +35,23 @@ Purpose: Two-part idempotent population script with Multi-Piece Shipment (MPS) h
          It's calculated on-the-fly via vw_shipment_summary view from shipment_charges
          (single source of truth). This eliminates sync issues and ensures correctness.
 
-Sources:  billing.fedex_bill (for attributes with MPS logic)
-billing.vw_FedExCharges (for charges)
+File-Based Filtering: Uses @File_id to process only the current file's data:
+         - Filters fedex_bill via carrier_bill JOIN on file_id
+         - Filters vw_FedExCharges using file_id column
+         - Enables cross-carrier parallel processing (different files simultaneously)
+         - Supports reliable retry of failed files without reprocessing completed data
+
+Sources:  billing.fedex_bill + carrier_bill JOIN (file_id filtered)
+          billing.vw_FedExCharges (includes file_id for filtering)
 Targets:  billing.shipment_attributes (business key: carrier_id + tracking_number)
-billing.shipment_charges (with shipment_attribute_id FK)
+          billing.shipment_charges (with shipment_attribute_id FK)
 Joins:    dbo.charge_types (charge_type_id lookup)
 View:     billing.vw_shipment_summary (calculated billed_shipping_cost)
 
 Idempotency: - Part 1: NOT EXISTS check + UNIQUE constraint prevents duplicate attributes
              - Part 2: NOT EXISTS check prevents duplicate charges
              - Both parts use same pattern: INSERT ... WHERE NOT EXISTS
-             - Safe to rerun with same @lastrun
+             - Safe to rerun with same @File_id
 
 Execution Order: FOURTH in pipeline (after Sync_Reference_Data.sql completes).
                  Part 2 depends on Part 1 for shipment_attribute_id lookup.
@@ -88,7 +93,8 @@ BEGIN TRY
             f.*,
             COUNT(*) OVER (PARTITION BY f.express_or_ground_tracking_id) as ground_id_count
         FROM billing.fedex_bill f
-        WHERE f.created_date > @lastrun
+        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = f.carrier_bill_id  -- NEW: Join for file_id
+        WHERE cb.file_id = @File_id  -- NEW: File-based filtering (replaces created_date > @lastrun)
           AND f.carrier_bill_id IS NOT NULL
     ),
     fx_classified AS (
@@ -238,7 +244,7 @@ billing.shipment_attributes sa
             ON sa.carrier_id = @Carrier_id
             AND sa.tracking_number = v.express_or_ground_tracking_id
         WHERE 
-            v.created_date > @lastrun
+            v.file_id = @File_id  -- NEW: File-based filtering (replaces created_date > @lastrun)
     )
     INSERT INTO billing.shipment_charges (
         carrier_id,

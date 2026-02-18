@@ -283,7 +283,8 @@ GROUP BY sa.id, ...;
 - Part 2 (INSERT charges): NOT EXISTS check prevents duplicate charges
 - Both parts use same pattern for consistency
 - View recalculates cost from whatever charges exist (always correct)
-- Safe to rerun with same `@lastrun` - no double-counting, no corruption
+- Safe to rerun with same `@File_id` - no double-counting, no corruption
+- File-based filtering isolates processing to specific file data only
 
 ---
 
@@ -473,10 +474,10 @@ CASE WHEN UPPER(dim_unit) = 'CM'
 ## Integration Notes
 
 **Pipeline Execution Order**:
-1. `LookupCarrierInfo.sql` - Get `@Carrier_id` and `@lastrun`
-2. `Insert_ELT_&_CB.sql` - Populate `carrier_bill` + `fedex_bill` from delta staging
-3. `Sync_Reference_Data.sql` - Populate `charge_types` and `shipping_method` from new data
-4. `Insert_Unified_tables.sql` - **Idempotent 2-part pipeline**:
+1. `ValidateAndInitializeFile.sql` - Validate account, get `@Carrier_id` and `@File_id`
+2. `Insert_ELT_&_CB.sql` - Populate `carrier_bill` + `fedex_bill` from delta staging (with `file_id`)
+3. `Sync_Reference_Data.sql` - Populate `charge_types` and `shipping_method` from new data (filtered by `file_id`)
+4. `Insert_Unified_tables.sql` - **Idempotent 2-part pipeline** (filtered by `file_id`):
    - Part 1: INSERT `shipment_attributes` (metadata only, NOT EXISTS + UNIQUE constraint enforces no duplicates)
    - Part 2: INSERT `shipment_charges` (with FK to attributes, NOT EXISTS prevents duplicates)
    - Both parts safe to rerun independently
@@ -485,9 +486,10 @@ CASE WHEN UPPER(dim_unit) = 'CM'
 
 Each SQL script returns structured result sets for ADF monitoring and error handling:
 
-1. **LookupCarrierInfo.sql** Output:
+1. **ValidateAndInitializeFile.sql** Output:
    - `carrier_id` (INT) - Carrier identifier for downstream queries
-   - `last_run_time` (DATETIME2) - Last successful run timestamp
+   - `file_id` (INT) - File tracking ID for file-based filtering
+   - `validated_carrier_name` (NVARCHAR) - Carrier name or 'Skip' if already processed
 
 2. **Insert_ELT_&_CB.sql** Output:
    - `Status` ('SUCCESS' or 'ERROR')
@@ -516,8 +518,9 @@ Each SQL script returns structured result sets for ADF monitoring and error hand
 **Dependencies**:
 - Part 2 depends on Part 1 for `shipment_attribute_id` FK lookup (within same script execution)
 - `Sync_Reference_Data.sql` must run before `Insert_Unified_tables.sql` to populate charge_types
-- `@lastrun` parameter drives incremental processing across all steps
-- Idempotency guaranteed by constraints and NOT EXISTS checks
+- `@File_id` parameter drives file-based filtering across all steps
+- File tracking enables parallel processing, fail-fast duplicate detection, and selective retry
+- Idempotency guaranteed by constraints, NOT EXISTS checks, and file_id filtering
 
 ---
 

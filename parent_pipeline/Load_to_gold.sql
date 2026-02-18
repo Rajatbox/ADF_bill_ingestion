@@ -1,47 +1,18 @@
 /*
 ================================================================================
-Parent Pipeline: Load to Gold Layer (WMS Enrichment + Cost Ledger)
+Load to Gold Layer - WMS Enrichment & Cost Ledger
 ================================================================================
-Note: Database name is parameterized via ADF Linked Service per environment
-      (DEV/UAT/PROD). Scripts reference only schema.table format.
+Inputs:  @File_id (INT), @Carrier_id (INT)
+Outputs: Status, ShipmentsUpdated, PackagesUpdated, LedgerInserted, Error details
 
-ADF Pipeline Variables Required:
-  INPUT:
-    - @lastrun: DATETIME2 - Last run timestamp for incremental processing
-    - @carrier_id: INT - Carrier identifier (from ValidateCarrierInfo)
-  
-  OUTPUT:
-    - Status: 'SUCCESS' or 'ERROR'
-    - ShipmentsUpdated: INT - Number of shipment records updated
-    - PackagesUpdated: INT - Number of shipment_package records updated
-    - LedgerInserted: INT - Number of carrier_cost_ledger records inserted
-    - ErrorNumber: INT (if error)
-    - ErrorMessage: NVARCHAR (if error)
-    - ErrorLine: INT (if error)
+Purpose:
+  1. UPDATE dbo.shipment with zone and carrier info
+  2. UPDATE dbo.shipment_package with dimensions, weights, dates, costs
+  3. INSERT dbo.carrier_cost_ledger with itemized charges and matching status
 
-Purpose: Three-part pipeline to enrich WMS master data with carrier billing attributes
-         and populate cost ledger with itemized charges:
-         1. UPDATE shipment with zone and carrier information
-         2. UPDATE shipment_package with dimensions, weights, dates, methods, costs
-         3. INSERT carrier_cost_ledger with itemized charges and matching status
-
-Source:   billing.shipment_attributes (unified carrier billing)
-billing.vw_shipment_summary (aggregated view)
-billing.shipment_charges (itemized charges)
-
-Targets:  dbo.shipment (WMS master data - UPDATE)
-dbo.shipment_package (WMS master data - UPDATE)
-dbo.carrier_cost_ledger (billing ledger - INSERT)
-
-Idempotency: - Parts 1 & 2: UPDATEs are inherently idempotent (last update wins)
-             - Part 3: INSERT with NOT EXISTS check prevents duplicates
-             - All parts use @lastrun for incremental filtering
-             - Safe to rerun unlimited times
-
-Carrier-Agnostic: Works for ALL carriers (FedEx, UPS, DHL, etc.)
-                  Uses only unified layer - no carrier-specific tables
-
-Execution Order: SIXTH in pipeline (after Insert_Unified_tables.sql)
+Idempotent: Safe to rerun. Parts 1-2 update, Part 3 uses NOT EXISTS check.
+Carrier-Agnostic: Works for all carriers using unified billing layer.
+Execution Order: Runs after Insert_Unified_tables.sql
 ================================================================================
 */
 
@@ -49,53 +20,50 @@ SET NOCOUNT ON;
 
 DECLARE @ShipmentsUpdated INT, @PackagesUpdated INT, @LedgerInserted INT;
 
+-- Pre-filter shipment_attribute_ids for current file (reused across all 3 operations)
+DECLARE @FileShipments TABLE (
+    shipment_attribute_id INT PRIMARY KEY
+);
+
+INSERT INTO @FileShipments (shipment_attribute_id)
+SELECT DISTINCT sc.shipment_attribute_id
+FROM billing.shipment_charges sc
+JOIN billing.carrier_bill cb ON cb.carrier_bill_id = sc.carrier_bill_id
+WHERE cb.file_id = @File_id
+  AND sc.carrier_id = @Carrier_id;
+
 BEGIN TRY
 
     /*
     ================================================================================
-    Part 1: UPDATE shipment (WMS Master Data Enrichment)
-    ================================================================================
-    Enrich WMS shipment master data with carrier billing zone and carrier information.
-    
-    Match Logic: WMS external_id = billing tracking_number
-    Incremental: Only update records with new billing data (created_date > @lastrun)
-    Idempotent: UPDATE operation - safe to run multiple times
+    Part 1: Update shipment with zone and carrier info
     ================================================================================
     */
-
     UPDATE sw
     SET 
         sw.destination_zone = sa.destination_zone,
         sw.carrier_id = sa.carrier_id
     FROM 
-dbo.shipment AS sw
+        dbo.shipment AS sw
     JOIN 
-dbo.shipment_package AS spw
+        dbo.shipment_package AS spw
         ON spw.shipment_id = sw.shipment_id
     JOIN 
-billing.shipment_attributes AS sa
+        billing.shipment_attributes AS sa
         ON spw.tracking_number = sa.tracking_number
+    JOIN
+        @FileShipments fs
+        ON fs.shipment_attribute_id = sa.id
     WHERE 
-        sa.created_date > @lastrun
-        AND sa.carrier_id = @carrier_id
-        AND NULLIF(sa.tracking_number, '') IS NOT NULL;
+        NULLIF(sa.tracking_number, '') IS NOT NULL;
 
     SET @ShipmentsUpdated = @@ROWCOUNT;
 
     /*
     ================================================================================
-    Part 2: UPDATE shipment_package (WMS Master Data Enrichment)
-    ================================================================================
-    Enrich WMS package master data with carrier billing dimensions, weights, dates,
-    shipping method, and calculated shipping cost.
-    
-    Source: vw_shipment_summary (pre-calculated dimensions, weights, cost, dates)
-    Match Logic: WMS tracking_number = billing tracking_number
-    Incremental: Only update records with new billing data (via view)
-    Idempotent: UPDATE operation - safe to run multiple times
+    Part 2: Update shipment_package with dimensions, weights, dates, costs
     ================================================================================
     */
-
     UPDATE spw
     SET 
         spw.carrier_pickup_date = vss.shipment_date,
@@ -106,41 +74,27 @@ billing.shipment_attributes AS sa
         spw.billed_height_in = vss.billed_height_in,
         spw.billed_shipping_cost = vss.billed_shipping_cost
     FROM 
-dbo.shipment_package AS spw
+        dbo.shipment_package AS spw
     JOIN 
-billing.vw_shipment_summary AS vss
+        billing.vw_shipment_summary AS vss
         ON spw.tracking_number = vss.tracking_number
+    JOIN
+        @FileShipments fs
+        ON fs.shipment_attribute_id = vss.id
     LEFT JOIN 
-dbo.shipping_method AS sm
+        dbo.shipping_method AS sm
         ON sm.method_name = vss.shipping_method
         AND sm.carrier_id = vss.carrier_id
     WHERE 
-        vss.created_date > @lastrun
-        AND vss.carrier_id = @carrier_id
-        AND NULLIF(vss.tracking_number, '') IS NOT NULL;
+        NULLIF(vss.tracking_number, '') IS NOT NULL;
 
     SET @PackagesUpdated = @@ROWCOUNT;
 
     /*
     ================================================================================
-    Part 3: INSERT carrier_cost_ledger (Billing Data Population)
-    ================================================================================
-    Populate cost ledger with itemized charges from carrier billing, linking to
-    WMS master data for matching status.
-    
-    Source: shipment_charges (itemized billing charges)
-    Enrichment: charge_types (charge_category_id -> dbo.charge_type_category), 
-                carrier_bill (invoice info), shipment_attributes (shipment_date), 
-                WMS tables (matching), order table (customer_id)
-    Match Logic: Links to WMS via shipment_package_id FK, then to order via order_id
-    Incremental: Only insert new charges (created_date > @lastrun)
-    Idempotent: NOT EXISTS check on (shipment_attribute_id, carrier_bill_id, charge_type_id)
-                Uses existing index on shipment_attribute_id for performance
-    
-    Note: INNER JOIN to charge_types ensures all charges have valid charge type definitions
+    Part 3: Insert itemized charges into cost ledger with matching status
     ================================================================================
     */
-
     INSERT INTO dbo.carrier_cost_ledger (
         carrier_invoice_number,
         carrier_invoice_date,
@@ -186,33 +140,32 @@ dbo.shipping_method AS sm
             ELSE 'unknown'
         END AS status
     FROM 
-billing.shipment_charges AS sc
+        billing.shipment_charges AS sc
     JOIN 
-billing.carrier_bill AS cb
+        billing.carrier_bill AS cb
         ON cb.carrier_bill_id = sc.carrier_bill_id
+        AND cb.file_id = @File_id
     JOIN 
-dbo.charge_types AS ct
+        dbo.charge_types AS ct
         ON ct.charge_type_id = sc.charge_type_id
     JOIN
-dbo.charge_type_category AS ctc
+        dbo.charge_type_category AS ctc
         ON ctc.category_id = ct.charge_category_id
     LEFT JOIN 
-billing.shipment_attributes AS sa
+        billing.shipment_attributes AS sa
         ON sa.tracking_number = sc.tracking_number
         AND sa.carrier_id = sc.carrier_id
     LEFT JOIN 
-dbo.shipment_package AS spw
+        dbo.shipment_package AS spw
         ON spw.tracking_number = sc.tracking_number
     LEFT JOIN 
-dbo.shipment AS sw
+        dbo.shipment AS sw
         ON sw.shipment_id = spw.shipment_id
     LEFT JOIN 
-dbo.[order] AS o
+        dbo.[order] AS o
         ON o.order_id = sw.order_id
     WHERE 
-        sc.created_date > @lastrun
-        AND sc.carrier_id = @carrier_id
-        AND NOT EXISTS (
+        NOT EXISTS (
             SELECT 1
             FROM dbo.carrier_cost_ledger AS ccl
             WHERE ccl.shipment_attribute_id = sc.shipment_attribute_id
@@ -222,38 +175,6 @@ dbo.[order] AS o
 
     SET @LedgerInserted = @@ROWCOUNT;
 
-    /*
-    ================================================================================
-    Part 4: UPDATE carrier_ingestion_tracker (Timestamp Tracking)
-    ================================================================================
-    Update last_run_time for the carrier after successful completion.
-    This timestamp is used by the next run for incremental processing.
-    
-    Note: This assumes @carrier_id parameter is passed from parent pipeline.
-          If not available, this step can be moved to a separate script or
-          handled at the child pipeline level.
-    
-    Idempotent: MERGE operation - inserts if missing, updates if exists
-    ================================================================================
-    */
-    
-    MERGE INTO billing.carrier_ingestion_tracker AS target
-    USING (
-        SELECT 
-            c.carrier_name,
-            SYSDATETIME() AS last_run_time
-        FROM dbo.carrier c
-        WHERE c.carrier_id = @carrier_id
-    ) AS source
-    ON target.carrier_name = source.carrier_name
-    WHEN MATCHED THEN
-        UPDATE SET 
-            last_run_time = source.last_run_time
-    WHEN NOT MATCHED THEN
-        INSERT (carrier_name, last_run_time)
-        VALUES (source.carrier_name, source.last_run_time);
-
-    -- Return success with row counts for ADF monitoring
     SELECT 
         'SUCCESS' AS Status,
         @ShipmentsUpdated AS ShipmentsUpdated,
@@ -262,13 +183,11 @@ dbo.[order] AS o
 
 END TRY
 BEGIN CATCH
-    -- Return error details for ADF to handle
     SELECT 
         'ERROR' AS Status,
         ERROR_NUMBER() AS ErrorNumber,
         ERROR_MESSAGE() AS ErrorMessage,
         ERROR_LINE() AS ErrorLine;
     
-    -- Re-throw error for ADF pipeline to catch
     THROW;
 END CATCH;

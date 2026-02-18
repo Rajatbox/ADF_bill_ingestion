@@ -873,7 +873,10 @@ CREATE TABLE billing.carrier_bill ( -- rename to carrier_bill
 	discrepancy_amount decimal(18,2) NULL,
 	bill_number varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	account_number varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	CONSTRAINT PK__carrier___A6B346871A6B3E58 PRIMARY KEY (carrier_bill_id)
+	file_id int NULL,  -- NEW: Links to file_ingestion_tracker for file-based processing
+	CONSTRAINT PK__carrier___A6B346871A6B3E58 PRIMARY KEY (carrier_bill_id),
+	CONSTRAINT FK_carrier_bill_file_ingestion FOREIGN KEY (file_id) 
+		REFERENCES billing.file_ingestion_tracker(file_id)
 );
 
 -- Unique constraint: Prevent duplicate invoices per carrier
@@ -884,6 +887,10 @@ WHERE carrier_id IS NOT NULL AND bill_date IS NOT NULL;
 -- Index for carrier-based queries
 CREATE NONCLUSTERED INDEX IX_carrier_bill_carrier_id
 ON billing.carrier_bill (carrier_id, bill_date);
+
+-- Index for file-based queries (NEW)
+CREATE NONCLUSTERED INDEX IX_carrier_bill_file_id
+ON billing.carrier_bill (file_id);
 
 -----------------------------------------------------------------------------------------------------------------
 
@@ -896,6 +903,28 @@ CREATE TABLE billing.carrier_ingestion_tracker (
 	last_run_time datetime2 NOT NULL,
 	CONSTRAINT PK_carrier_ingestion_tracker PRIMARY KEY (carrier_name)
 );
+
+-----------------------------------------------------------------------------------------------------------------
+
+-- File Ingestion Tracker Table (NEW)
+-- Purpose: Tracks individual file processing status for parallel cross-carrier processing
+-- Usage: Replaces time-based incremental processing with file-based tracking
+--        Enables fail-fast duplicate detection and selective file retry
+CREATE TABLE billing.file_ingestion_tracker (
+	file_id int IDENTITY(1,1) NOT NULL,
+	file_name varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	carrier_id int NOT NULL,
+	created_at datetime2 DEFAULT sysdatetime() NOT NULL,
+	completed_at datetime2 NULL,  -- NULL = in progress/failed/retry, NOT NULL = completed
+	CONSTRAINT PK_file_ingestion_tracker PRIMARY KEY (file_id),
+	CONSTRAINT FK_file_ingestion_tracker_carrier FOREIGN KEY (carrier_id) 
+		REFERENCES dbo.carrier(carrier_id),
+	CONSTRAINT UQ_file_ingestion_tracker_file_carrier UNIQUE (file_name, carrier_id)
+);
+
+-- Index for completion queries
+CREATE NONCLUSTERED INDEX IX_file_ingestion_tracker_completed
+ON billing.file_ingestion_tracker (carrier_id, completed_at, created_at);
 
 -----------------------------------------------------------------------------------------------------------------
 
@@ -1104,9 +1133,11 @@ SELECT
     fb.invoice_number,
     fb.express_or_ground_tracking_id,
     fb.created_date,
+    cb.file_id,  -- NEW: For file-based filtering
     v.charge_type,
     v.charge_amount
 FROM billing.fedex_bill fb
+JOIN billing.carrier_bill cb ON cb.carrier_bill_id = fb.carrier_bill_id  -- NEW: Join for file_id
 OUTER APPLY (
     VALUES
         ('Transportation Charge', fb.[Transportation Charge Amount]),
