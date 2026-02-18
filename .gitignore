@@ -9,3 +9,6 @@ venv/
 .env.test
 .env.production
 main.ipynb
+*.duckdb
+*.duckdb.wal
+*.ipynb 

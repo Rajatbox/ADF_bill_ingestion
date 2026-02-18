@@ -1,0 +1,17 @@
+Invoice Number,Date,Order Number,Shipment Number,Service Level,Terms Of Trade,Origin Location,Destination Country,Ship To Address Zip,Carrier,Weight Unit,Total Weight,Dimension Unit,Length,Width,Height,Commissions (USD),Duties (USD),Taxes (USD),Fees (USD),LandedCost (Duty + Taxes + Fees) (USD),Insurance (USD),Shipping Charges (USD),Order Value (USD),Shipment Total Charges (USD),Shipment Date,Payment Terms,Due Date
+FLCL-1jfpthha9r78,"Jan 25, 2026",2671918,16889P0122260001156670,STANDARD,DDP,Falcon Fulfillment UT,IT,50139,APC LAX,LB,1.700000048,IN,10,7,7,6.15,0,27.72,8.04,35.76,0,18.98,107,60.89,01-22-2026,Upon Receipt,01-26-2026
+FLCL-1jfpthha9r78,"Jan 25, 2026",2669776,1Z868Y6A6790232896,EXPRESS,DDP,Falcon Fulfillment UT,CH,1009,UPS,LB,1.498201439,IN,8.5,7,3.5,12.88,0,19.89,8.98,28.87,0,32.41,224,74.16,01-22-2026,Upon Receipt,01-26-2026
+FLCL-1jfpthha9r78,"Jan 25, 2026",2669920,1Z868Y6A6799105927,EXPRESS,DDP,Falcon Fulfillment UT,NO,1391,UPS,LB,1.498201439,IN,8.5,7,3.5,4.37,0,28.51,13.28,41.79,0,32.41,76,78.57,01-22-2026,Upon Receipt,01-26-2026
+FLCL-1jfpthha9r78,"Jan 25, 2026",2671822,16889P0122260001156653,STANDARD,DDP,Falcon Fulfillment UT,AU,3056,APC LAX,LB,1.200000048,IN,8.5,7,3.5,8.45,0,0,0,0,0,13.47,147,21.92,01-22-2026,Upon Receipt,01-26-2026
+FLCL-1jfpthha9r78,"Jan 25, 2026",2671353,1Z868Y6A6794379418,EXPRESS,DDP,Falcon Fulfillment UT,CH,1224,UPS,LB,1.498201439,IN,8.5,7,3.5,3.22,0,7.08,6.42,13.5,0,32.41,56,49.13,01-21-2026,Upon Receipt,01-26-2026
+FLCL-1jfpthha9r78,"Jan 25, 2026",2671559,16889P0119260001148577,STANDARD,DDP,Falcon Fulfillment UT,AU,3161,APC LAX,LB,0.8999999762,IN,8.5,7,3.5,2.3,0,0,0,0,0,11.67,40,13.97,01-19-2026,Upon Receipt,01-26-2026
+FLCL-1jfpthha9r78,"Jan 25, 2026",2670992,16889P0117260001147173,STANDARD,DDP,Falcon Fulfillment UT,NL,3512PL,APC LAX,LB,2.349999905,IN,10,7,7,8.05,0,34.09,9.32,43.41,0,22.34,140,73.8,01-17-2026,Upon Receipt,01-26-2026
+Total,,,,,,,,,,,,,,,,45.42,0,117.29,46.04,163.33,0,163.69,790,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Shipping Cost,163.69,,,,,,,,,,,,,,,,,,,,,,,,,,
+Duties,0,,,,,,,,,,,,,,,,,,,,,,,,,,
+Taxes,117.29,,,,,,,,,,,,,,,,,,,,,,,,,,
+Fees,46.04,,,,,,,,,,,,,,,,,,,,,,,,,,
+Insurance,0,,,,,,,,,,,,,,,,,,,,,,,,,,
+Commission,45.42,,,,,,,,,,,,,,,,,,,,,,,,,,
+Amount Due,372.44,,,,,,,,,,,,,,,,,,,,,,,,,,
