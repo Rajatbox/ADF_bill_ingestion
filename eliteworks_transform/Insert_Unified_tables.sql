@@ -181,8 +181,7 @@ BEGIN TRY
     WHERE
         e.created_date > @lastrun
         AND e.carrier_bill_id IS NOT NULL
-        AND e.tracking_number IS NOT NULL
-        AND NULLIF(TRIM(e.tracking_number), '') IS NOT NULL
+        AND e.platform_charged <> 0
         -- Idempotency: Check by carrier_bill_id + tracking_number + charge_type_id
         AND NOT EXISTS (
             SELECT 1
