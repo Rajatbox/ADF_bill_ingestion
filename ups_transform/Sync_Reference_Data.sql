@@ -6,8 +6,8 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @carrier_id: INT - UPS carrier_id from LookupCarrierInfo.sql
-    - @lastrun: DATETIME2 - Last successful run time from LookupCarrierInfo.sql
+    - @carrier_id: INT - UPS carrier_id from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -17,11 +17,14 @@ ADF Pipeline Variables Required:
     - ErrorMessage: NVARCHAR (if error)
 
 Purpose: Discovers and inserts NEW shipping methods and charge types from ups_bill
-         into reference tables. Runs incrementally based on created_date.
+         into reference tables.
 
-Source:   billing.ups_bill
+Source:   billing.ups_bill + carrier_bill JOIN (file_id filtered)
 Targets:  dbo.shipping_method
           dbo.charge_types
+
+File-Based Filtering: Uses @File_id to process only the current file's data:
+         - Joins carrier_bill to filter by file_id
 
 Transaction: NO TRANSACTION - Each INSERT is independently idempotent via NOT EXISTS
 Idempotency: Safe to re-run - inserts only if not exists (with carrier_id check)
@@ -63,8 +66,9 @@ BEGIN TRY
         1 AS is_active
     FROM
         billing.ups_bill AS ub
+        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = ub.carrier_bill_id
     WHERE
-        ub.created_date > @lastrun
+        cb.file_id = @File_id  -- File-based filtering
         AND ub.charge_category_code = 'SHP'
         AND ub.charge_classification_code = 'FRT'
         AND ub.charge_description IS NOT NULL
@@ -117,8 +121,9 @@ BEGIN TRY
         END AS charge_category_id
     FROM
         billing.ups_bill AS ub
+        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = ub.carrier_bill_id
     WHERE
-        ub.created_date > @lastrun
+        cb.file_id = @File_id  -- File-based filtering
         AND ub.charge_description IS NOT NULL
         AND NOT EXISTS (
             SELECT 1

@@ -74,8 +74,11 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 - Create an implementation plan and present to user BEFORE generating scripts
 - Ask clarifying questions and wait for user approval
 - Read `DESIGN_CONSTRAINTS.md` before generating any scripts
-- Apply all 10 design constraints
+- Apply all design constraints (including file-based processing)
+- Use `@File_id` parameter for filtering (not `@lastrun`)
 - Use transactions ONLY for `Insert_ELT_&_CB.sql`
+- Join to `carrier_bill` for file-based filtering in Sync and Unified scripts
+- File-based idempotency: Check `cb.file_id = @File_id` in carrier_bill NOT EXISTS
 - Convert weight to OZ (LB × 16, KG × 35.274)
 - Convert dimensions to IN (CM ÷ 2.54, MM ÷ 25.4)
 - Include `carrier_id` in all NOT EXISTS checks
@@ -89,13 +92,14 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 1. **Parent Pipeline:** Never modify - it's carrier-agnostic
 2. **Transactions:** Only for `Insert_ELT_&_CB.sql` (invoice + line items)
 3. **Type Conversion:** Direct CAST (fail fast on bad data)
-4. **Idempotency:** NOT EXISTS with carrier_id
+4. **Idempotency:** NOT EXISTS with carrier_id AND file-based filtering
 5. **Business Key:** (carrier_id, tracking_number) - enforced by UNIQUE INDEX
 6. **Cost Calculation:** View calculates on-the-fly (NOT stored in table)
 7. **Unit Conversions:** Weight → OZ, Dimensions → IN (REQUIRED)
 8. **Script Returns:** Status, counts, error details
 9. **Format Support:** Narrow (one row per charge) OR Wide (unpivot view)
 10. **Execution Order:** ELT → Sync → Unified → Load_to_gold
+11. **File-Based Processing:** Use @File_id parameter, join carrier_bill, filter by file_id
 
 ---
 

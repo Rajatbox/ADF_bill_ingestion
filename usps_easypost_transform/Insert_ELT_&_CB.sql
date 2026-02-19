@@ -6,7 +6,8 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier ID from LookupCarrierInfo.sql
+    - @Carrier_id: INT - Carrier ID from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -15,9 +16,9 @@ ADF Pipeline Variables Required:
     - ErrorNumber: INT (if error)
     - ErrorMessage: NVARCHAR (if error)
 
-Purpose: Two-step transactional data insertion process:
+Purpose: Two-step transactional data insertion process with file tracking:
          1. Aggregate and insert invoice-level summary data from delta_usps_easypost_bill 
-            into carrier_bill (Carrier Bill summary) - generates carrier_bill_id
+            into carrier_bill with file_id - generates carrier_bill_id
          2. Insert line-level billing data from delta_usps_easypost_bill (ELT staging) 
             into billing.usps_easy_post_bill (Carrier Bill line items)
 
@@ -30,14 +31,19 @@ Invoice Number Generation:
          Note: Same formula used in both INSERTs to ensure deterministic joins
 
 Source:   billing.delta_usps_easypost_bill
-Targets:  billing.carrier_bill (invoice summaries)
+Targets:  billing.carrier_bill (invoice summaries with file_id)
           billing.usps_easy_post_bill (line items)
+
+File Tracking: file_id stored in carrier_bill enables:
+               - File-based idempotency checks (same file won't create duplicates)
+               - Cross-carrier parallel processing (different files, different carriers)
+               - Selective file retry on failure
 
 Validation: Fails if created_at or tracking_code is NULL or empty
 Match:      invoice_number AND bill_date (INSERT WHERE NOT EXISTS)
 Transaction: Both inserts wrapped in transaction for atomicity - all succeed or all fail
 
-Execution Order: SECOND in pipeline (after LookupCarrierInfo.sql)
+Execution Order: SECOND in pipeline (after ValidateCarrierInfo.sql)
 ================================================================================
 */
 
@@ -74,7 +80,8 @@ BEGIN TRY
         bill_date,
         total_amount,
         num_shipments,
-        account_number
+        account_number,
+        file_id
     )
     SELECT
         @Carrier_id AS carrier_id,
@@ -82,7 +89,8 @@ BEGIN TRY
         CAST(d.created_at AS DATE) AS bill_date,
         SUM(CAST(COALESCE(NULLIF(TRIM(d.postage_fee), ''), '0') AS decimal(18,2))) AS total_amount,
         COUNT(d.tracking_code) AS num_shipments,
-        MAX(d.carrier_account_id) AS account_number
+        MAX(d.carrier_account_id) AS account_number,
+        @File_id AS file_id
     FROM
         billing.delta_usps_easypost_bill AS d
     WHERE
@@ -97,9 +105,7 @@ BEGIN TRY
     HAVING NOT EXISTS (
         SELECT 1
         FROM billing.carrier_bill cb
-        WHERE cb.bill_number = CONCAT(d.carrier_account_id, '-', FORMAT(CAST(d.created_at AS DATE), 'yyyy-MM-dd'))
-          AND cb.bill_date = CAST(d.created_at AS DATE)
-          AND cb.carrier_id = @Carrier_id
+        WHERE cb.file_id = @File_id  -- File-based idempotency: same file = same data
     );
 
     SET @InvoicesInserted = @@ROWCOUNT;

@@ -93,8 +93,8 @@ BEGIN TRY
             f.*,
             COUNT(*) OVER (PARTITION BY f.express_or_ground_tracking_id) as ground_id_count
         FROM billing.fedex_bill f
-        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = f.carrier_bill_id  -- NEW: Join for file_id
-        WHERE cb.file_id = @File_id  -- NEW: File-based filtering (replaces created_date > @lastrun)
+        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = f.carrier_bill_id
+        WHERE cb.file_id = @File_id  -- File-based filtering
           AND f.carrier_bill_id IS NOT NULL
     ),
     fx_classified AS (
@@ -244,7 +244,7 @@ billing.shipment_attributes sa
             ON sa.carrier_id = @Carrier_id
             AND sa.tracking_number = v.express_or_ground_tracking_id
         WHERE 
-            v.file_id = @File_id  -- NEW: File-based filtering (replaces created_date > @lastrun)
+            v.file_id = @File_id  -- File-based filtering
     )
     INSERT INTO billing.shipment_charges (
         carrier_id,

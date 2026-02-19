@@ -6,10 +6,9 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier identifier from LookupCarrierInfo activity
+    - @Carrier_id: INT - Carrier identifier from parent pipeline
                          Used to associate new shipping methods and charge types with correct carrier
-    - @lastrun: DATETIME2 - Last successful run timestamp for incremental processing
-                            Filters created_date to process only new/updated records
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -23,10 +22,13 @@ Purpose: Automatically populate and maintain reference/lookup tables by
          Block 1: Sync shipping_method (discovered from data)
          Block 2: ONE-TIME SEED of 5 fixed USPS EasyPost charge types (static)
 
-Source:  billing.usps_easy_post_bill (for service types)
+Source:  billing.usps_easy_post_bill + carrier_bill JOIN (file_id filtered)
          
 Targets: dbo.shipping_method
          dbo.charge_types (one-time seed of 5 fixed charges)
+
+File-Based Filtering: Uses @File_id to process only the current file's data:
+         - Joins carrier_bill to filter by file_id
 
 Execution Order: THIRD in pipeline (after Insert_ELT_&_CB.sql completes).
                  This ensures reference data is discovered from validated bills only.
@@ -55,8 +57,6 @@ BEGIN TRY
     - service_level: Default to 'Standard'
     - guaranteed_delivery: Default to 0 (false)
     - is_active: Default to 1 (true)
-    
-    Incremental Processing: Only processes records created after @lastrun
     ================================================================================
     */
 
@@ -75,8 +75,9 @@ BEGIN TRY
         1 AS is_active
     FROM 
         billing.usps_easy_post_bill u
+        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = u.carrier_bill_id
     WHERE 
-        u.created_at > @lastrun
+        cb.file_id = @File_id  -- File-based filtering
         AND u.service IS NOT NULL
         AND NULLIF(TRIM(u.service), '') IS NOT NULL
         AND NOT EXISTS (

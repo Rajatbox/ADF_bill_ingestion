@@ -24,7 +24,7 @@ DECLARE @ActualAccountInFile NVARCHAR(100) = CASE
     WHEN @InputCarrier = 'fedex' THEN JSON_VALUE(@RawJson, '$.Prop_1')
     WHEN @InputCarrier = 'dhl'   THEN JSON_VALUE(@RawJson, '$.Prop_1')
     WHEN @InputCarrier = 'ups'   THEN JSON_VALUE(@RawJson, '$.Prop_2')
-    WHEN @InputCarrier = 'usps - easy post' THEN JSON_VALUE(@RawJson, '$.carrier_account_id')
+    WHEN @InputCarrier = 'usps - easy post' THEN JSON_VALUE(@RawJson, '$.Prop_32')
     ELSE 'UNKNOWN_CARRIER'
 END;
 

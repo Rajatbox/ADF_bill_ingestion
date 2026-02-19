@@ -6,7 +6,8 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier identifier from LookupCarrierInfo activity
+    - @Carrier_id: INT - Carrier identifier from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -15,14 +16,14 @@ ADF Pipeline Variables Required:
     - ErrorNumber: INT (if error)
     - ErrorMessage: NVARCHAR (if error)
 
-Purpose: Two-step transactional data insertion process:
+Purpose: Two-step transactional data insertion process with file tracking:
          1. Aggregate and insert invoice-level summary data from delta_dhl_bill 
-            into carrier_bill - generates carrier_bill_id
+            into carrier_bill with file_id - generates carrier_bill_id
          2. Insert line-level billing data from delta_dhl_bill into dhl_bill
             with carrier_bill_id foreign key
 
 Source:   billing.delta_dhl_bill
-Targets:  billing.carrier_bill (invoice summaries)
+Targets:  billing.carrier_bill (invoice summaries with file_id)
           billing.dhl_bill (line items)
 
 Tracking Number Logic (applied in Step 2):
@@ -33,8 +34,13 @@ Carrier Bill Total: SUM(transportation_cost + non_qualified_dimensional_charges
                         + fuel_surcharge_amount + delivery_area_surcharge_amount)
                     Computed from DTL rows (no HDR row in delta table).
 
+File Tracking: file_id stored in carrier_bill enables:
+               - File-based idempotency checks (same file won't create duplicates)
+               - Cross-carrier parallel processing (different files, different carriers)
+               - Selective file retry on failure
+
 Transaction: Both inserts wrapped in transaction for atomicity
-Execution Order: SECOND in pipeline (after LookupCarrierInfo.sql)
+Execution Order: SECOND in pipeline (after ValidateCarrierInfo.sql)
 ================================================================================
 */
 
@@ -66,7 +72,8 @@ BEGIN TRY
         bill_date,
         total_amount,
         num_shipments,
-        account_number
+        account_number,
+        file_id
     )
     SELECT
         @Carrier_id AS carrier_id,
@@ -79,7 +86,8 @@ BEGIN TRY
             + ISNULL(CAST(NULLIF(TRIM(d.delivery_area_surcharge_amount), '') AS decimal(18,2)), 0)
         ) AS total_amount,
         COUNT(*) AS num_shipments,
-        MAX(d.account_number) AS account_number
+        MAX(d.account_number) AS account_number,
+        @File_id AS file_id
     FROM
         billing.delta_dhl_bill AS d
     WHERE
@@ -92,9 +100,7 @@ BEGIN TRY
         NOT EXISTS (
             SELECT 1
             FROM billing.carrier_bill AS cb
-            WHERE cb.bill_number = CAST(d.invoice_number AS nvarchar(50))
-                AND cb.bill_date = CAST(NULLIF(TRIM(d.invoice_date), '') AS date)
-                AND cb.carrier_id = @Carrier_id
+            WHERE cb.file_id = @File_id  -- File-based idempotency: same file = same data
         );
 
     SET @InvoicesInserted = @@ROWCOUNT;

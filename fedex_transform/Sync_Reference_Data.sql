@@ -120,7 +120,7 @@ SELECT DISTINCT
 FROM 
 billing.vw_FedExCharges v
 WHERE 
-    v.file_id = @File_id  -- NEW: File-based filtering (replaces created_date > @lastrun)
+    v.file_id = @File_id  -- File-based filtering
     AND NULLIF(TRIM(v.charge_type), '') IS NOT NULL
     AND NOT EXISTS (
         SELECT 1

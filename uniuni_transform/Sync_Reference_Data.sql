@@ -6,10 +6,9 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier identifier from LookupCarrierInfo activity
+    - @Carrier_id: INT - Carrier identifier from parent pipeline
                          Used to associate new reference data with correct carrier
-    - @lastrun: DATETIME2 - Last successful run timestamp for incremental processing
-                            Filters created_date to process only new/updated records
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -21,9 +20,12 @@ Purpose: Idempotent synchronization of reference data tables:
          
          Sync shipping_method table with new service types discovered from bills
 
-Source:   billing.uniuni_bill (for shipping methods)
+Source:   billing.uniuni_bill + carrier_bill JOIN (file_id filtered)
 
 Targets:  dbo.shipping_method
+
+File-Based Filtering: Uses @File_id to process only the current file's data:
+         - Joins carrier_bill to filter by file_id
 
 Note:     Charge types are initialized via Insert_Charge_Types_OneTime.sql
           (one-time setup script, not part of regular pipeline)
@@ -70,8 +72,9 @@ SELECT DISTINCT
     1 AS is_active
 FROM
     billing.uniuni_bill AS ub
+    JOIN billing.carrier_bill cb ON cb.carrier_bill_id = ub.carrier_bill_id
 WHERE
-    ub.created_date > @lastrun
+    cb.file_id = @File_id  -- File-based filtering
     AND ub.service_type IS NOT NULL
     AND NOT EXISTS (
         SELECT 1

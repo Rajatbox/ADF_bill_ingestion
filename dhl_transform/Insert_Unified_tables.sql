@@ -6,9 +6,8 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier identifier from LookupCarrierInfo activity
-    - @lastrun: DATETIME2 - Last successful run timestamp for incremental processing
-                            Filters created_date to process only new/updated records
+    - @Carrier_id: INT - Carrier identifier from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -26,16 +25,19 @@ Purpose: Two-part idempotent population script (no MPS logic needed for DHL):
          - recipient_country = 'US' → use domestic_tracking_number
          - recipient_country != 'US' → use international_tracking_number
 
-Sources:  billing.dhl_bill (for attributes and charges)
+Sources:  billing.dhl_bill + carrier_bill JOIN (file_id filtered)
 Targets:  billing.shipment_attributes (business key: carrier_id + tracking_number)
           billing.shipment_charges (with shipment_attribute_id FK)
 Joins:    dbo.charge_types (charge_type_id lookup)
+
+File-Based Filtering: Uses @File_id to process only the current file's data via carrier_bill JOIN
 
 Unit Conversions Applied:
   - Weight: LB → OZ (× 16), KG → OZ (× 35.274), OZ → OZ (× 1)
 
 Idempotency: - Part 1: NOT EXISTS check + UNIQUE constraint prevents duplicate attributes
              - Part 2: NOT EXISTS check prevents duplicate charges
+             - Safe to rerun with same @File_id
 
 Execution Order: FOURTH in pipeline (after Sync_Reference_Data.sql completes).
 ================================================================================
@@ -91,7 +93,8 @@ BEGIN TRY
             ELSE dhl.billed_weight                     -- default: assume oz
         END AS billed_weight_oz
     FROM billing.dhl_bill dhl
-    WHERE dhl.created_date > @lastrun
+    JOIN billing.carrier_bill cb ON cb.carrier_bill_id = dhl.carrier_bill_id
+    WHERE cb.file_id = @File_id  -- File-based filtering
       AND dhl.carrier_bill_id IS NOT NULL
       AND CASE 
               WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
@@ -142,6 +145,7 @@ BEGIN TRY
             sa.id AS shipment_attribute_id
         FROM 
             billing.dhl_bill dhl
+        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = dhl.carrier_bill_id
         CROSS APPLY (VALUES
             (N'Transportation Cost',        dhl.transportation_cost),
             (N'Non-Qualified Dim',          dhl.non_qualified_dimensional_charges),
@@ -160,7 +164,7 @@ BEGIN TRY
                 ELSE dhl.international_tracking_number
             END
         WHERE 
-            dhl.created_date > @lastrun
+            cb.file_id = @File_id  -- File-based filtering
             AND dhl.carrier_bill_id IS NOT NULL
             AND x.amount IS NOT NULL
             AND x.amount <> 0

@@ -6,7 +6,8 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @carrier_id: INT - UPS carrier_id from LookupCarrierInfo.sql
+    - @carrier_id: INT - UPS carrier_id from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -15,21 +16,26 @@ ADF Pipeline Variables Required:
     - ErrorNumber: INT (if error)
     - ErrorMessage: NVARCHAR (if error)
 
-Purpose: Two-step transactional data insertion process:
+Purpose: Two-step transactional data insertion process with file tracking:
          1. Aggregate and insert invoice-level summary data from delta_ups_bill 
-            into carrier_bill (Carrier Bill summary) - generates carrier_bill_id
+            into carrier_bill with file_id - generates carrier_bill_id
          2. Insert line-level billing data from delta_ups_bill (ELT staging) 
             into ups_bill (Carrier Bill line items) with carrier_bill_id foreign key
 
 Source:   billing.delta_ups_bill
-Targets:  billing.carrier_bill (invoice summaries)
+Targets:  billing.carrier_bill (invoice summaries with file_id)
           billing.ups_bill (line items)
+
+File Tracking: file_id stored in carrier_bill enables:
+               - File-based idempotency checks (same file won't create duplicates)
+               - Cross-carrier parallel processing (different files, different carriers)
+               - Selective file retry on failure
 
 Validation: Fails if invoice_date is NULL or empty (fail fast with CAST)
 Match:      carrier_bill_id (INSERT WHERE NOT EXISTS) - cleaner idempotency
 Transaction: Both inserts wrapped in transaction for atomicity - all succeed or all fail
 
-Execution Order: SECOND in pipeline (after LookupCarrierInfo.sql)
+Execution Order: SECOND in pipeline (after ValidateCarrierInfo.sql)
 ================================================================================
 */
 
@@ -58,7 +64,8 @@ BEGIN TRY
         bill_date,
         total_amount,
         num_shipments,
-        account_number
+        account_number,
+        file_id
     )
     SELECT
         @carrier_id AS carrier_id,
@@ -66,21 +73,21 @@ BEGIN TRY
         CONVERT(date, NULLIF(TRIM(d.[Invoice Date]), '')) AS bill_date,
         SUM(CAST(d.[Net Amount] AS decimal(18,2))) AS total_amount,
         COUNT(DISTINCT d.[Tracking Number]) AS num_shipments,
-        MAX(d.[Account Number]) AS account_number
+        MAX(d.[Account Number]) AS account_number,
+        @File_id AS file_id
     FROM
         billing.delta_ups_bill AS d
     WHERE
         NULLIF(TRIM(d.[Invoice Date]), '') IS NOT NULL
-        AND NOT EXISTS (
-            SELECT 1
-            FROM billing.carrier_bill AS cb
-            WHERE cb.bill_number = d.[Invoice Number]
-                AND cb.bill_date = CONVERT(date, NULLIF(TRIM(d.[Invoice Date]), ''))
-                AND cb.carrier_id = @carrier_id
-        )
     GROUP BY
         d.[Invoice Number],
-        CONVERT(date, NULLIF(TRIM(d.[Invoice Date]), ''));
+        CONVERT(date, NULLIF(TRIM(d.[Invoice Date]), ''))
+    HAVING
+        NOT EXISTS (
+            SELECT 1
+            FROM billing.carrier_bill AS cb
+            WHERE cb.file_id = @File_id  -- File-based idempotency: same file = same data
+        );
 
     SET @InvoicesInserted = @@ROWCOUNT;
 

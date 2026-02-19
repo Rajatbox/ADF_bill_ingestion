@@ -895,9 +895,9 @@ ON billing.carrier_bill (file_id);
 -----------------------------------------------------------------------------------------------------------------
 
 -- Carrier Ingestion Tracker Table
--- Purpose: Tracks last successful run timestamp per carrier for incremental processing
--- Usage: Updated by Load_to_gold.sql after successful pipeline completion
---        Read by ValidateCarrierInfo.sql to provide @lastrun parameter
+-- Purpose: LEGACY - Previously tracked last run timestamp per carrier (replaced by file_ingestion_tracker)
+-- Current Usage: May be used by Load_to_gold.sql for backwards compatibility
+-- Note: New implementations use file-based tracking via file_ingestion_tracker table
 CREATE TABLE billing.carrier_ingestion_tracker (
 	carrier_name varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	last_run_time datetime2 NOT NULL,

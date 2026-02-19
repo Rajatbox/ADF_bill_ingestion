@@ -80,13 +80,29 @@ Key rules to apply:
 
 ### Step 4: Generate Scripts
 
+**Input Parameters (All Scripts):**
+- `@Carrier_id` (INT) - Carrier identifier from parent pipeline
+- `@File_id` (INT) - File tracking ID from ValidateCarrierInfo.sql
+
+**No longer used**: `@lastrun` (replaced by file-based tracking)
+
+---
+
 #### 1. Insert_ELT_&_CB.sql
 Template:
 ```sql
 BEGIN TRANSACTION;
-    -- Step 1: INSERT carrier_bill
-    INSERT INTO carrier_bill ...
-    WHERE NOT EXISTS (bill_number, bill_date, carrier_id);
+    -- Step 1: INSERT carrier_bill (with file_id)
+    INSERT INTO carrier_bill (
+        carrier_id, bill_number, bill_date, 
+        total_amount, num_shipments, account_number, 
+        file_id  -- NEW
+    )
+    SELECT ...., @File_id AS file_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM carrier_bill cb
+        WHERE cb.file_id = @File_id  -- File-based idempotency
+    );
     
     -- Step 2: INSERT [carrier]_bill
     INSERT INTO [carrier]_bill ...
@@ -96,8 +112,9 @@ COMMIT TRANSACTION;
 
 **Rules:**
 - ✅ Wrapped in transaction
+- ✅ Add `file_id` column to carrier_bill INSERT (value: `@File_id`)
+- ✅ Idempotency: `WHERE cb.file_id = @File_id` (checks if file already processed)
 - ✅ Direct CAST (fail fast)
-- ✅ NOT EXISTS includes carrier_id
 - ✅ Returns: Status, InvoicesInserted, LineItemsInserted
 
 #### 2. Sync_Reference_Data.sql
@@ -107,15 +124,23 @@ Template:
 
 -- Step 1: Sync shipping methods
 INSERT INTO shipping_method ...
-WHERE NOT EXISTS (method_name, carrier_id);
+FROM [carrier]_bill [carrier]
+JOIN carrier_bill cb ON cb.carrier_bill_id = [carrier].carrier_bill_id
+WHERE cb.file_id = @File_id  -- File-based filtering
+  AND NOT EXISTS (method_name, carrier_id);
 
 -- Step 2: Sync charge types
 INSERT INTO charge_types ...
-WHERE NOT EXISTS (charge_name, carrier_id);
+FROM [carrier]_bill [carrier]
+JOIN carrier_bill cb ON cb.carrier_bill_id = [carrier].carrier_bill_id
+WHERE cb.file_id = @File_id  -- File-based filtering
+  AND NOT EXISTS (charge_name, carrier_id);
 ```
 
 **Rules:**
 - ✅ No transaction (idempotent)
+- ✅ Filter by `@File_id` (not `@lastrun`)
+- ✅ Join to carrier_bill: `WHERE cb.file_id = @File_id`
 - ✅ NOT EXISTS includes carrier_id
 - ✅ Returns: ShippingMethodsAdded, ChargeTypesAdded
 
@@ -139,15 +164,24 @@ SELECT
     CASE WHEN unit='LB' THEN weight*16 ELSE weight END,  -- Convert
     CASE WHEN unit='CM' THEN length/2.54 ELSE length END, -- Convert
     ...
-WHERE NOT EXISTS (carrier_id, tracking_number);
+FROM [carrier]_bill [carrier]
+JOIN carrier_bill cb ON cb.carrier_bill_id = [carrier].carrier_bill_id
+WHERE cb.file_id = @File_id  -- File-based filtering
+  AND NOT EXISTS (carrier_id, tracking_number);
 
 -- Part 2: INSERT shipment_charges
 INSERT INTO shipment_charges ...
-WHERE NOT EXISTS (shipment_attribute_id, carrier_bill_id, charge_type_id);
+FROM [carrier]_bill [carrier]
+JOIN carrier_bill cb ON cb.carrier_bill_id = [carrier].carrier_bill_id
+WHERE cb.file_id = @File_id  -- File-based filtering
+  AND NOT EXISTS (shipment_attribute_id, carrier_bill_id, charge_type_id);
 ```
 
 **Rules:**
 - ✅ No transaction (idempotent)
+- ✅ Filter by `@File_id` (not `@lastrun`)
+- ✅ Part 1: Join carrier_bill, filter `WHERE cb.file_id = @File_id`
+- ✅ Part 2: Join carrier_bill (or use view with file_id), filter `WHERE cb.file_id = @File_id`
 - ✅ Unit conversions applied
 - ✅ NOT EXISTS on business keys
 - ✅ Returns: Status, AttributesInserted, ChargesInserted
@@ -156,16 +190,20 @@ WHERE NOT EXISTS (shipment_attribute_id, carrier_bill_id, charge_type_id);
 
 **ONE test query:**
 ```sql
--- Validation: File total = Charges total
+-- Test: File total vs charges total
+DECLARE @File_id INT = /* test file_id */;
+DECLARE @Carrier_id INT = /* carrier_id */;
+
 WITH file_total AS (
-    SELECT SUM([total_column]) AS expected
-    FROM delta_[carrier]_bill
+    SELECT SUM(cb.total_amount) AS expected
+    FROM carrier_bill cb
+    WHERE cb.file_id = @File_id  -- File-based filtering
 ),
 charges_total AS (
     SELECT SUM(sc.amount) AS actual
     FROM shipment_charges sc
-    JOIN shipment_attributes sa ON sa.id = sc.shipment_attribute_id
-    WHERE sa.carrier_id = @Carrier_id
+    JOIN carrier_bill cb ON cb.carrier_bill_id = sc.carrier_bill_id
+    WHERE cb.file_id = @File_id  -- File-based filtering
 )
 SELECT 
     expected,

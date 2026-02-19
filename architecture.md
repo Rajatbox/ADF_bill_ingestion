@@ -133,16 +133,16 @@ END;
 - Error message visible in ADF monitoring
 
 **Success Behavior:**
-Returns carrier metadata for downstream activities:
+Returns carrier metadata and file tracking information for downstream activities:
 
 **Output Variables:**
 - `carrier_id` (INT): Carrier identifier from `dbo.carrier` table
-- `last_run_time` (DATETIME2): Last successful run timestamp (defaults to `'2000-01-01'` if first run)
-- `validated_carrier_name` (NVARCHAR): Lowercase carrier name for Switch activity routing
+- `file_id` (INT): File tracking surrogate key from `billing.file_ingestion_tracker`
+- `validated_carrier_name` (NVARCHAR): Lowercase carrier name for Switch activity routing, or 'Skip' if file already processed
 
 **Tables Accessed:**
 - `dbo.carrier` (carrier master data)
-- `billing.carrier_ingestion_tracker` (run history for incremental processing)
+- `billing.file_ingestion_tracker` (file processing status - creates/checks file records)
 
 **Why SQL Instead of ADF IF Condition:**
 - **Maintainability:** Single source of truth for validation logic (easier to update)
@@ -172,7 +172,7 @@ Returns carrier metadata for downstream activities:
 
 **Parameters Passed to Child Pipelines:**
 - `p_carrier_id`: From ValidateCarrierInfo output
-- `p_last_run_time`: From ValidateCarrierInfo output
+- `p_file_id`: From ValidateCarrierInfo output
 - `v_FileMetadata`: Array containing parsed file path segments
 
 ---
@@ -225,7 +225,7 @@ Each carrier has a dedicated child pipeline that processes billing data through 
 | Parameter | Type | Source | Purpose |
 |-----------|------|--------|---------|
 | `p_carrier_id` | INT | Parent pipeline (ValidateCarrierInfo) | Carrier identifier for data association |
-| `p_last_run_time` | DATETIME2 | Parent pipeline (ValidateCarrierInfo) | Incremental processing filter |
+| `p_file_id` | INT | Parent pipeline (ValidateCarrierInfo) | File tracking ID for file-based filtering |
 | `v_FileMetadata` | Array | Parent pipeline | File metadata (tenant, carrier, account, filename) |
 
 ### Activity Execution Order
@@ -289,6 +289,7 @@ flowchart TD
 
 **Input Parameters:**
 - `@Carrier_id` (or `@carrier_id`): From parent pipeline parameter `p_carrier_id`
+- `@File_id`: From parent pipeline parameter `p_file_id`
 
 **Target Tables (2-step process):**
 
@@ -300,9 +301,10 @@ flowchart TD
   - `bill_date` - Invoice date
   - `total_amount` - Sum of all charges on invoice
   - `num_shipments` - Count of shipments on invoice
-  - `account_number` - **NEW:** Account number from CSV file
+  - `account_number` - Account number from CSV file
+  - `file_id` - **NEW:** File tracking ID for file-based processing
 - **Grain:** One row per invoice per carrier
-- **Idempotency:** `NOT EXISTS (bill_number, bill_date, carrier_id)`
+- **Idempotency:** `NOT EXISTS (file_id)` - File-based idempotency check
 
 **Step 2: Line-Item Detail**
 - **Tables (carrier-specific):**
@@ -313,6 +315,12 @@ flowchart TD
 - **Contains:** Shipment-level details with `carrier_bill_id` foreign key
 - **Grain:** One row per shipment (varies by carrier)
 - **Idempotency:** `NOT EXISTS (carrier_bill_id, tracking_number, ...)` with carrier-specific checks
+
+**File Tracking Benefits:**
+- **File-based idempotency:** Same file won't create duplicates (fail-fast detection)
+- **Cross-carrier parallel processing:** Different carriers/files process simultaneously
+- **Selective file retry:** Rerun specific failed files without reprocessing all data
+- **Atomicity per file:** Each file is an independent processing unit
 
 **Transaction Boundaries:** 
 - **Transactional:** Yes (wrapped in `BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK`)
@@ -373,12 +381,12 @@ HAVING NOT EXISTS (
 
 **Input Parameters:**
 - `@Carrier_id` (or `@carrier_id`): From parent pipeline parameter `p_carrier_id`
-- `@lastrun`: From parent pipeline parameter `p_last_run_time` (filters new data only)
+- `@File_id`: From parent pipeline parameter `p_file_id` (filters current file's data only)
 
 **Source Tables (carrier-specific):**
-- Carrier-specific staging tables (e.g., `billing.delta_fedex_bill`)
-- Carrier-specific views for charge unpivoting (e.g., `billing.vw_FedExCharges`)
-- Carrier-specific bill tables (e.g., `billing.dhl_bill`)
+- Carrier-specific bill tables (e.g., `billing.fedex_bill`, `billing.dhl_bill`)
+- Carrier-specific charge views (e.g., `billing.vw_FedExCharges`)
+- `billing.carrier_bill` (joined for file_id filtering)
 
 **Target Tables (shared across all carriers):**
 1. `dbo.shipping_method` - Service types (e.g., 'Ground', 'Express', 'DHL Parcel International Standard')
@@ -431,11 +439,12 @@ HAVING NOT EXISTS (
 
 **Input Parameters:**
 - `@Carrier_id` (or `@carrier_id`): From parent pipeline parameter `p_carrier_id`
-- `@lastrun`: From parent pipeline parameter `p_last_run_time` (incremental processing)
+- `@File_id`: From parent pipeline parameter `p_file_id` (file-based filtering)
 
 **Source Tables (carrier-specific):**
 - Carrier-specific bill tables (e.g., `billing.fedex_bill`, `billing.dhl_bill`)
 - Carrier-specific charge views (e.g., `billing.vw_FedExCharges`, `billing.vw_DHLCharges`)
+- `billing.carrier_bill` (joined for file_id filtering)
 - `dbo.charge_types` (for charge type FK lookups)
 - `dbo.shipping_method` (for service type FK lookups)
 
@@ -489,7 +498,7 @@ FedEx billing includes MPS groups where multiple packages share one master track
 - Part 1: `INSERT ... WHERE NOT EXISTS (carrier_id, tracking_number)` + UNIQUE constraint prevents duplicates
 - Part 2: `INSERT ... WHERE NOT EXISTS (carrier_bill_id, tracking_number, charge_type_id)` prevents duplicates
 - View recalculates cost from whatever charges exist (always correct)
-- Safe to rerun with same `@lastrun` - no double-counting, no corruption
+- Safe to rerun with same `@File_id` - no double-counting, no corruption
 
 **Output Variables:**
 - `Status`: 'SUCCESS' or 'ERROR'
@@ -584,11 +593,15 @@ flowchart LR
 - `bill_date` - Invoice date
 - `total_amount` - Sum of all charges on invoice
 - `num_shipments` - Count of shipments on invoice
-- `account_number` - **Account number from CSV file** (extracted during ingestion)
+- `account_number` - Account number from CSV file (extracted during ingestion)
+- `file_id` - **NEW:** Foreign key to `billing.file_ingestion_tracker` (file-based processing)
 
 **Unique Constraint:**
 - `UQ_carrier_bill_number_date_carrier` on `(bill_number, bill_date, carrier_id)`
 - Prevents duplicate invoices per carrier
+
+**Foreign Key:**
+- `FK_carrier_bill_file_ingestion` on `file_id` references `file_ingestion_tracker(file_id)`
 
 **Account Number Sources:**
 - FedEx: `[Bill to Account Number]` (e.g., `594939735`)
@@ -652,21 +665,32 @@ Each transformation activity returns row counts for monitoring:
 - Error details logged to ADF run history
 - Row counts enable data quality monitoring
 
-### Incremental Processing
+### File-Based Processing
 
-**Mechanism:** `@lastrun` parameter (from `carrier_ingestion_tracker` table via `ValidateCarrierInfo.sql`)
+**Mechanism:** `@File_id` parameter (from `file_ingestion_tracker` table via `ValidateCarrierInfo.sql`)
 
-**Activities Using Incremental Filter:**
-- `Sync_Reference_Data.sql`: Filters new data based on `created_date > @lastrun`
-- `Insert_Unified_tables.sql`: Filters new records based on `created_date > @lastrun`
+**Activities Using File-Based Filter:**
+- `Insert_ELT_&_CB.sql`: Stores `file_id` in `carrier_bill` table, checks `WHERE cb.file_id = @File_id` for idempotency
+- `Sync_Reference_Data.sql`: Joins `carrier_bill` and filters `WHERE cb.file_id = @File_id`
+- `Insert_Unified_tables.sql`: Joins `carrier_bill` and filters `WHERE cb.file_id = @File_id` in both parts
 
-**First Run Behavior:** `@lastrun` defaults to '2000-01-01', processing all historical data
+**File Tracking Flow:**
+1. **ValidateCarrierInfo.sql** creates/checks file record in `file_ingestion_tracker`
+   - Returns `file_id` if file not yet completed
+   - Returns 'Skip' if file already completed (fail-fast duplicate detection)
+2. Child pipeline processes data filtered by `file_id`
+3. **CompleteFileProcessing.sql** marks file as completed (`completed_at` timestamp set)
 
-**Subsequent Runs:** Only processes records created since last successful run
+**Benefits:**
+- **Idempotency:** Same file won't create duplicates (file_id check in carrier_bill)
+- **Parallelism:** Different carriers/files process simultaneously without conflicts
+- **Selective Retry:** Rerun specific failed files without reprocessing all data
+- **Atomicity:** Each file is an independent processing unit
+- **Fail-Fast:** Duplicate file detection before any processing begins
 
-**Source:** Parent pipeline's `ValidateCarrierInfo.sql` retrieves `last_run_time` from `carrier_ingestion_tracker` table and passes to child pipeline
+**Source:** Parent pipeline's `ValidateCarrierInfo.sql` creates file record and returns `file_id` to child pipeline
 
-**Update Mechanism:** `carrier_ingestion_tracker.last_run_time` updated after successful pipeline completion (future enhancement)
+**Completion Mechanism:** `CompleteFileProcessing.sql` updates `file_ingestion_tracker.completed_at` after successful pipeline completion
 
 ---
 

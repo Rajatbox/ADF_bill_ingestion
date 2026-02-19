@@ -6,9 +6,8 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier identifier from LookupCarrierInfo activity
-    - @lastrun: DATETIME2 - Last successful run timestamp for incremental processing
-                            Filters created_date to process only new/updated records
+    - @Carrier_id: INT - Carrier identifier from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -24,16 +23,19 @@ Purpose: Transform carrier-specific data into unified analytical schema:
             - Dimensions: CM × 0.393701 → IN, IN → IN (no conversion)
          2. Unpivot 18 charge columns and insert into shipment_charges
 
-Source:   billing.uniuni_bill (carrier-specific line items)
+Source:   billing.uniuni_bill + carrier_bill JOIN (file_id filtered)
 Targets:  billing.shipment_attributes (unified physical data - NO cost stored)
           billing.shipment_charges (unified charge data)
 Joins:    dbo.charge_types (charge_type_id lookup)
           billing.carrier_bill (carrier_bill_id lookup)
 View:     billing.vw_shipment_summary (calculated billed_shipping_cost on-the-fly)
 
+File-Based Filtering: Uses @File_id to process only the current file's data:
+         - Filters uniuni_bill via carrier_bill JOIN on file_id
+
 Idempotency: - Part 1: NOT EXISTS check + UNIQUE constraint on (carrier_id, tracking_number)
              - Part 2: NOT EXISTS check on (shipment_attribute_id, carrier_bill_id, charge_type_id)
-             - Safe to rerun with same @lastrun
+             - Safe to rerun with same @File_id
 Transaction: NO TRANSACTION (each insert is independently idempotent)
 Business Key: (carrier_id, tracking_number) - enforced by UNIQUE INDEX
 
@@ -57,9 +59,6 @@ BEGIN TRY
     Unit Conversions (matching reference stored procedure logic):
     - Weight: Uses dim_weight (LBS × 16 → OZ, OZS → OZ)
     - Dimensions: CM × 0.393701 → IN, IN → IN (no conversion)
-    
-    Incremental Processing: Filters by created_date > @lastrun to only process
-    new records since last successful run.
     ================================================================================
     */
 
@@ -113,8 +112,9 @@ BEGIN TRY
         
     FROM
         billing.uniuni_bill AS ub
+        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = ub.carrier_bill_id
     WHERE
-        ub.created_date > @lastrun    -- Incremental filter: only new records
+        cb.file_id = @File_id    -- File-based filtering
         AND NOT EXISTS (
             SELECT 1
             FROM billing.shipment_attributes AS sa
@@ -138,9 +138,6 @@ BEGIN TRY
     - Peak Season Surcharge, Delivery Area Surcharge, Delivery Area Surcharge Extend
     - Truck Fee, Relabel Fee, Miscellaneous Fee, Credit Card Surcharge
     - Credit, Approved Claim
-    
-    Incremental Processing: Filters by created_date > @lastrun to only process
-    new records since last successful run.
     ================================================================================
     */
 
@@ -200,7 +197,7 @@ BEGIN TRY
             ON sa.tracking_number = ub.tracking_number
             AND sa.carrier_id = @Carrier_id
     WHERE
-        ub.created_date > @lastrun    -- Incremental filter: only new records      -- amount can be negative 
+        cb.file_id = @File_id    -- File-based filtering      -- amount can be negative 
         AND charges.amount <> 0
         AND NOT EXISTS (
             SELECT 1

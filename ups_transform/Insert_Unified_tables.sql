@@ -6,8 +6,8 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @carrier_id: INT - UPS carrier_id from LookupCarrierInfo.sql
-    - @lastrun: DATETIME2 - Last successful run time from LookupCarrierInfo.sql
+    - @carrier_id: INT - UPS carrier_id from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -20,9 +20,11 @@ Purpose: Populates unified gold layer tables:
          Part 1: shipment_attributes (physical shipment data with unit conversions)
          Part 2: shipment_charges (itemized charges)
 
-Source:   billing.ups_bill
+Source:   billing.ups_bill + carrier_bill JOIN (file_id filtered)
 Targets:  billing.shipment_attributes
           billing.shipment_charges
+
+File-Based Filtering: Uses @File_id to process only the current file's data via carrier_bill JOIN
 
 Transaction: NO TRANSACTION - Each INSERT is independently idempotent
 Idempotency: Safe to re-run - inserts only if not exists (carrier_id + tracking_number)
@@ -124,7 +126,8 @@ BEGIN TRY
                             END
                     END AS billed_height_in
             ) v
-            WHERE ub.created_date > @lastrun
+            JOIN billing.carrier_bill cb ON cb.carrier_bill_id = ub.carrier_bill_id
+            WHERE cb.file_id = @File_id  -- File-based filtering
                 AND ub.tracking_number IS NOT NULL
             GROUP BY ub.tracking_number
     )
@@ -205,7 +208,7 @@ BEGIN TRY
         ON ct.carrier_id = @carrier_id
         AND ct.charge_name = ub.charge_description
     WHERE
-        ub.created_date > @lastrun
+        cb.file_id = @File_id  -- File-based filtering
         AND ub.net_amount <> 0  -- Exclude zero charges
         AND NOT EXISTS (
             SELECT 1
