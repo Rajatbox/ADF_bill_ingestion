@@ -6,10 +6,9 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier identifier from LookupCarrierInfo activity
+    - @Carrier_id: INT - Carrier identifier from parent pipeline
                          Used to associate new shipping methods with correct carrier
-    - @lastrun: DATETIME2 - Last successful run timestamp for incremental processing
-                            Filters created_date to process only new/updated records
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -23,9 +22,12 @@ Purpose: Automatically populate and maintain reference/lookup tables by
          Discovers and syncs shipping methods from service_level column 
          in flavorcloud_bill (e.g., "STANDARD", "EXPRESS").
 
-Source:  billing.flavorcloud_bill (for service types)
+Source:  billing.flavorcloud_bill + carrier_bill JOIN (file_id filtered)
          
 Targets: dbo.shipping_method
+
+File-Based Filtering: Uses @File_id to process only the current file's data:
+         - Joins carrier_bill to filter by file_id
 
 Note:    Charge types should be seeded separately using Insert_Charge_Types.sql
          before running the main pipeline.
@@ -58,7 +60,7 @@ BEGIN TRY
     - guaranteed_delivery: Default to 0 (false)
     - is_active: Default to 1 (true)
     
-    Incremental Processing: Only processes records created after @lastrun
+    File-Based Filtering: Joins carrier_bill and filters by file_id
     ================================================================================
     */
 
@@ -77,8 +79,9 @@ BEGIN TRY
         1 AS is_active
     FROM 
         billing.flavorcloud_bill f
+    JOIN billing.carrier_bill cb ON cb.carrier_bill_id = f.carrier_bill_id
     WHERE 
-        f.created_date > @lastrun
+        cb.file_id = @File_id  -- FILE-BASED FILTERING
         AND f.service_level IS NOT NULL
         AND NULLIF(TRIM(f.service_level), '') IS NOT NULL
         AND NOT EXISTS (

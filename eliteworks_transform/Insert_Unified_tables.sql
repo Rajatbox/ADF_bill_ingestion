@@ -6,9 +6,8 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier identifier from LookupCarrierInfo activity
-    - @lastrun: DATETIME2 - Last successful run timestamp for incremental processing
-                            Filters created_date to process only new/updated records
+    - @Carrier_id: INT - Carrier identifier from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -26,12 +25,15 @@ Purpose: Two-part idempotent population script:
          It's calculated on-the-fly via vw_shipment_summary view from shipment_charges
          (single source of truth). This eliminates sync issues and ensures correctness.
 
-Sources:  billing.eliteworks_bill (for attributes and charges)
-          billing.carrier_bill (for carrier_bill_id)
+Sources:  billing.eliteworks_bill + carrier_bill JOIN (file_id filtered)
+          billing.carrier_bill (for carrier_bill_id and file_id filtering)
 Targets:  billing.shipment_attributes (business key: carrier_id + tracking_number)
           billing.shipment_charges (with shipment_attribute_id FK)
 Joins:    dbo.charge_types (charge_type_id lookup)
 View:     billing.vw_shipment_summary (calculated billed_shipping_cost)
+
+File-Based Filtering: Uses @File_id to process only the current file's data:
+         - Filters eliteworks_bill via carrier_bill JOIN on file_id
 
 Charge Structure: Eliteworks stores 1 charge per shipment:
          - Platform Charged (platform_charged column) - freight=0, category_id=11
@@ -111,8 +113,9 @@ BEGIN TRY
         e.package_height_in AS billed_height_in
     FROM
         billing.eliteworks_bill e
+    JOIN billing.carrier_bill cb ON cb.carrier_bill_id = e.carrier_bill_id
     WHERE
-        e.created_date > @lastrun
+        cb.file_id = @File_id  -- FILE-BASED FILTERING
         AND e.tracking_number IS NOT NULL
         AND NULLIF(TRIM(e.tracking_number), '') IS NOT NULL
         -- Idempotency: Check business key (carrier_id, tracking_number)
@@ -178,8 +181,10 @@ BEGIN TRY
     INNER JOIN billing.shipment_attributes sa 
         ON sa.tracking_number = e.tracking_number
         AND sa.carrier_id = @Carrier_id
+    -- Join to get file_id for filtering
+    JOIN billing.carrier_bill cb ON cb.carrier_bill_id = e.carrier_bill_id
     WHERE
-        e.created_date > @lastrun
+        cb.file_id = @File_id  -- FILE-BASED FILTERING
         AND e.carrier_bill_id IS NOT NULL
         AND e.platform_charged <> 0
         -- Idempotency: Check by carrier_bill_id + tracking_number + charge_type_id

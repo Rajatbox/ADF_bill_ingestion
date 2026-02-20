@@ -336,6 +336,81 @@ ON dbo.shipment_package_wip (
 
 ---
 
+## eliteworks_transform & flavorcloud_transform
+
+### 8. Rename Delta Table Columns to Match CSV Column Names Exactly
+
+**Status:** Deferred  
+**Created:** 2026-02-20  
+**Priority:** Medium  
+**Complexity:** Medium
+
+**Current State:**
+The `delta_eliteworks_bill` and `delta_flavorcloud_bill` tables have column names that were renamed from their original CSV headers for developer convenience. For example, CSV columns like `user_account`, `tracking_number`, `Origin Location`, etc. were transformed into more readable/standardized names.
+
+**Issue:**
+The original design strategy was to keep delta table column names **identical** to CSV column headers to enable future hash comparison for automated schema change detection. When CSV schema changes (new columns, renamed columns, reordered columns), a hash comparison between:
+- CSV header row hash
+- Delta table column name hash
+
+...would immediately flag the schema drift without requiring manual inspection.
+
+**Examples of Renamed Columns:**
+- **Eliteworks:** CSV columns were normalized (e.g., `user_account` → standardized naming)
+- **FlavorCloud:** CSV columns were normalized (e.g., `Origin Location` → standardized naming)
+
+**Impact:**
+- ❌ **Cannot implement automated schema change detection** via hash comparison
+- ❌ **Manual inspection required** when carriers change CSV formats
+- ⚠️ **Inconsistent with other carriers** (FedEx, UPS, etc. maintain exact CSV column names)
+- ⚠️ **Higher maintenance burden** when troubleshooting CSV ingestion issues
+
+**Recommended Fix:**
+1. Rename delta table columns to match CSV headers exactly (case-sensitive, spaces preserved)
+2. Update ADF Copy Data activity column mappings to reflect new names
+3. Update all 3 transform scripts (`Insert_ELT_&_CB.sql`, `Sync_Reference_Data.sql`, `Insert_Unified_tables.sql`) to reference exact CSV column names with brackets/quotes
+4. Update example CSV files if needed
+
+**Example (Eliteworks):**
+```sql
+-- Current (normalized names)
+SELECT 
+    user_account,
+    tracking_number,
+    ship_date
+FROM billing.delta_eliteworks_bill;
+
+-- Desired (exact CSV names)
+SELECT 
+    [user_account],        -- Exact CSV header
+    [tracking_number],     -- Exact CSV header  
+    [ship_date]           -- Exact CSV header
+FROM billing.delta_eliteworks_bill;
+```
+
+**Implementation Steps:**
+1. Create `ALTER TABLE` statements to rename columns in both delta tables
+2. Update ADF pipeline's Copy Data activity "Named Column Mapping" in `architecture.md`
+3. Modify all SQL scripts in `eliteworks_transform/` and `flavorcloud_transform/` folders
+4. Test end-to-end ingestion with example CSV files
+5. Document exact CSV → Delta table column mappings
+
+**Future Benefit:**
+Once completed, implement automated schema validation in parent pipeline:
+```sql
+-- Hash comparison to detect CSV schema changes
+DECLARE @CsvHeaderHash int = CHECKSUM(CONCAT(/* CSV headers */));
+DECLARE @DeltaTableHash int = CHECKSUM(CONCAT(/* delta column names */));
+
+IF @CsvHeaderHash <> @DeltaTableHash
+    THROW 50001, 'CSV schema has changed - manual review required', 1;
+```
+
+**Priority:** Medium (blocks future automation, but no immediate functional impact)  
+**Impact:** Medium (enables automated schema change detection, improves consistency across carriers)
+
+---
+
 ## ups_transform/Insert_Unified_tables.sql
 
 ### 9. Charges with NULL Tracking Numbers Are Excluded

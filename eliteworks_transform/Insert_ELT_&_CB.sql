@@ -6,7 +6,8 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 
 ADF Pipeline Variables Required:
   INPUT:
-    - @Carrier_id: INT - Carrier ID from LookupCarrierInfo.sql
+    - @Carrier_id: INT - Carrier identifier from parent pipeline
+    - @File_id: INT - File tracking ID from parent pipeline
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
@@ -15,11 +16,16 @@ ADF Pipeline Variables Required:
     - ErrorNumber: INT (if error)
     - ErrorMessage: NVARCHAR (if error)
 
-Purpose: Two-step transactional data insertion process:
+Purpose: Two-step transactional data insertion process with file tracking:
          1. Aggregate and insert invoice-level summary data from delta_eliteworks_bill 
-            into carrier_bill (Carrier Bill summary) - generates carrier_bill_id
+            into carrier_bill with file_id - generates carrier_bill_id
          2. Insert line-level billing data from delta_eliteworks_bill (ELT staging) 
-            into billing.eliteworks_bill (Carrier Bill line items)
+            into billing.eliteworks_bill (Carrier Bill line items) with carrier_bill_id foreign key
+
+File Tracking: file_id stored in carrier_bill enables:
+               - File-based idempotency checks (same file won't create duplicates)
+               - Cross-carrier parallel processing (different files, different carriers)
+               - Selective file retry on failure
 
 Invoice Number Generation: 
          invoice_number = 'Eliteworks_' + yyyy-MM-dd from MAX(time_utc)
@@ -36,10 +42,11 @@ Targets:  billing.carrier_bill (invoice summaries)
           billing.eliteworks_bill (line items)
 
 Validation: Fails if time_utc or tracking_number is NULL or empty
-Match:      invoice_number AND invoice_date (INSERT WHERE NOT EXISTS)
+Match:      Step 1: file_id (INSERT WHERE NOT EXISTS)
+            Step 2: carrier_bill_id only (INSERT WHERE NOT EXISTS) per Design Constraint #9
 Transaction: Both inserts wrapped in transaction for atomicity - all succeed or all fail
 
-Execution Order: SECOND in pipeline (after LookupCarrierInfo.sql)
+Execution Order: SECOND in pipeline (after ValidateCarrierInfo.sql)
 ================================================================================
 */
 
@@ -78,7 +85,8 @@ BEGIN TRY
         bill_date,
         total_amount,
         num_shipments,
-        account_number
+        account_number,
+        file_id
     )
     SELECT
         @Carrier_id AS carrier_id,
@@ -86,7 +94,8 @@ BEGIN TRY
         CAST(MAX(d.time_utc) AS DATE) AS bill_date,
         SUM(CAST(d.platform_charged_with_corrections AS decimal(18,2))) AS total_amount,
         COUNT(*) AS num_shipments,
-        MAX(d.user_account) AS account_number
+        MAX(d.user_account) AS account_number,
+        @File_id AS file_id
     FROM
         billing.delta_eliteworks_bill AS d
     WHERE
@@ -98,9 +107,7 @@ BEGIN TRY
     HAVING NOT EXISTS (
         SELECT 1
         FROM billing.carrier_bill cb
-        WHERE cb.bill_number = 'Eliteworks_' + FORMAT(CAST(MAX(d.time_utc) AS DATE), 'yyyy-MM-dd')
-          AND cb.bill_date = CAST(MAX(d.time_utc) AS DATE)
-          AND cb.carrier_id = @Carrier_id
+        WHERE cb.file_id = @File_id  -- FILE-BASED IDEMPOTENCY
     );
 
     SET @InvoicesInserted = @@ROWCOUNT;
@@ -113,8 +120,17 @@ BEGIN TRY
     billing.eliteworks_bill.
     
     Join Strategy:
-    - Compute same invoice_number formula to validate invoice exists in carrier_bill
+    - Join to carrier_bill on carrier_id and file_id (just inserted in Step 1)
     - Use carrier_bill_id only in NOT EXISTS check (Design Constraint #9)
+    
+    NOTE: Eliteworks uses simplified file_id JOIN because of synthetic invoice model:
+          - Step 1 creates ONE invoice per file ('Eliteworks_' + date)
+          - Step 2 safely joins on file_id → matches exactly ONE carrier_bill row
+          
+          Other carriers (FedEx, UPS, etc.) CANNOT use this pattern because:
+          - Multiple real invoices per file (GROUP BY [Invoice Number])
+          - Must join on business keys to match line items to correct invoice
+          - Joining on file_id only would duplicate line items across all invoices
     
     Type Conversions:
     - Direct CAST (fail-fast on bad data, no TRY_CAST)
@@ -147,9 +163,9 @@ BEGIN TRY
         -- Foreign key to invoice summary
         cb.carrier_bill_id,
         
-        -- Computed invoice identifiers (same formula as Step 1)
-        'Eliteworks_' + FORMAT(CAST(MAX(d.time_utc) OVER () AS DATE), 'yyyy-MM-dd') AS invoice_number,
-        CAST(MAX(d.time_utc) OVER () AS DATE) AS invoice_date,
+        -- Invoice identifiers from carrier_bill (inserted in Step 1)
+        cb.bill_number AS invoice_number,
+        cb.bill_date AS invoice_date,
         
         -- Shipment identifiers
         TRIM(d.tracking_number) AS tracking_number,
@@ -179,9 +195,8 @@ BEGIN TRY
         d.status AS shipment_status
     FROM billing.delta_eliteworks_bill d
     INNER JOIN billing.carrier_bill cb
-        ON cb.bill_number = 'Eliteworks_' + FORMAT(CAST(MAX(d.time_utc) OVER () AS DATE), 'yyyy-MM-dd')
-        AND cb.bill_date = CAST(MAX(d.time_utc) OVER () AS DATE)
-        AND cb.carrier_id = @Carrier_id  -- Always include carrier_id in join
+        ON cb.carrier_id = @Carrier_id
+        AND cb.file_id = @File_id  -- Join to the record just inserted in Step 1
     WHERE
         -- Validation: Fail fast on bad data
         d.time_utc IS NOT NULL 

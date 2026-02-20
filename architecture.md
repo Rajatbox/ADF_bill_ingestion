@@ -17,7 +17,7 @@ This project automates the ingestion of carrier billing CSV files into an Azure 
 ## 2. Parent Pipeline: `pl_Master_Ingestion`
 
 ### Purpose
-Entry point for all carrier billing file ingestion. Validates file structure, account numbers, and routes to appropriate carrier-specific child pipeline. **Supports multiple carriers: FedEx, DHL, UPS, and USPS EasyPost.**
+Entry point for all carrier billing file ingestion. Validates file structure, account numbers, and routes to appropriate carrier-specific child pipeline. **Supports multiple carriers: FedEx, DHL, UPS, USPS EasyPost, and UniUni.**
 
 ### Trigger Context
 Currently trigger not implemented - in development phase passing file URL as parameter to pipeline runs.
@@ -27,15 +27,21 @@ Currently trigger not implemented - in development phase passing file URL as par
 - DHL: `falcon/dhl/0022161907/bill.csv`
 - UPS: `falcon/ups/000017X1R2/bill.csv`
 - USPS EasyPost: `falcon/usps - easy post/ca_589b9b61d0ed420890f0e826515491dd/bill.csv`
+- UniUni: `falcon/uniuni/ACCT001/bill.csv`
 
 ### Supported Carriers
 
-| Carrier | Folder Name | Account Position | Account Column | Notes |
-|---------|-------------|------------------|----------------|-------|
-| **FedEx** | `fedex` | `Prop_1` | `[Bill to Account Number]` | Ordinal mapping (positional) |
-| **DHL** | `dhl` | `Prop_1` | `account_number` | Ordinal mapping (positional) |
-| **UPS** | `ups` | `Prop_2` | `[Account Number]` | Ordinal mapping (positional) |
-| **USPS EasyPost** | `usps - easy post` | Column name | `carrier_account_id` | Named column mapping (has headers) |
+| Carrier | Folder Name | Account Position (Lookup) | Account Column | Copy Data Mapping |
+|---------|-------------|---------------------------|----------------|-------------------|
+| **FedEx** | `fedex` | `Prop_1` | `[Bill to Account Number]` | Ordinal (no headers) |
+| **DHL** | `dhl` | `Prop_1` | `account_number` | Ordinal (no headers) |
+| **UPS** | `ups` | `Prop_2` | `[Account Number]` | Ordinal (no headers) |
+| **USPS EasyPost** | `usps - easy post` | `Prop_32` | `carrier_account_id` | Named (has headers) |
+| **UniUni** | `uniuni` | Column name | `[Merchant ID]` | Named (has headers) |
+| **Eliteworks** | `eliteworks` | `Prop_2` | `user_account` (Column 3) | Named (has headers) |
+| **FlavorCloud** | `flavorcloud` | `Prop_6` | `[Origin Location]` (Column 7) | Named (has headers) |
+
+**Note**: Account Position (Lookup) refers to the ordinal position used in `ValidateCarrierInfo.sql` for account validation. Copy Data Mapping refers to how the staging table is populated.
 
 ### Pipeline Variables
 
@@ -56,10 +62,16 @@ flowchart TD
     Switch -->|dhl| DhlPipeline[Execute: pl_DHL_transform]
     Switch -->|ups| UpsPipeline[Execute: pl_UPS_transform]
     Switch -->|usps - easy post| UspsPipeline[Execute: pl_USPS_transform]
+    Switch -->|uniuni| UniUniPipeline[Execute: pl_UniUni_transform]
+    Switch -->|eliteworks| EliteworksPipeline[Execute: pl_Eliteworks_transform]
+    Switch -->|flavorcloud| FlavorCloudPipeline[Execute: pl_FlavorCloud_transform]
     FedexPipeline --> End
     DhlPipeline --> End
     UpsPipeline --> End
     UspsPipeline --> End
+    UniUniPipeline --> End
+    EliteworksPipeline --> End
+    FlavorCloudPipeline --> End
 ```
 
 ---
@@ -117,14 +129,19 @@ DECLARE @ActualAccountInFile NVARCHAR(100) = CASE
     WHEN @InputCarrier = 'fedex' THEN JSON_VALUE(@RawJson, '$.Prop_1')
     WHEN @InputCarrier = 'dhl'   THEN JSON_VALUE(@RawJson, '$.Prop_1')
     WHEN @InputCarrier = 'ups'   THEN JSON_VALUE(@RawJson, '$.Prop_2')
-    WHEN @InputCarrier = 'usps - easy post' THEN JSON_VALUE(@RawJson, '$.carrier_account_id')
+    WHEN @InputCarrier = 'usps - easy post' THEN JSON_VALUE(@RawJson, '$.Prop_32')
+    WHEN @InputCarrier = 'uniuni' THEN JSON_VALUE(@RawJson, '$."Merchant ID"')
+    WHEN @InputCarrier = 'eliteworks' THEN JSON_VALUE(@RawJson, '$.Prop_2')  -- Column 3: USER
+    WHEN @InputCarrier = 'flavorcloud' THEN JSON_VALUE(@RawJson, '$.Prop_6')  -- Column 7: Origin Location
     ELSE 'UNKNOWN_CARRIER'
 END;
 ```
 
+**Note**: Even though some carriers (USPS, UniUni, Eliteworks, FlavorCloud) use named column mapping in the Copy Data activity, the LookupAccountInFile activity uses ordinal positions (Prop_X) for all carriers.
+
 **Validation Rules:**
 1. **USPS EasyPost:** Uses `LIKE` matching (account ID format: `ca_xxxxx` where folder contains partial ID)
-2. **Other Carriers:** Exact match between file account and folder account
+2. **Other Carriers (FedEx, DHL, UPS, UniUni):** Exact match between file account and folder account
 3. **Unknown Carriers:** Raises error if carrier not recognized
 
 **Failure Behavior:**
@@ -167,6 +184,9 @@ Returns carrier metadata and file tracking information for downstream activities
 | `dhl` | `pl_DHL_transform` | DHL |
 | `ups` | `pl_UPS_transform` | UPS |
 | `usps - easy post` | `pl_USPS_transform` | USPS EasyPost |
+| `uniuni` | `pl_UniUni_transform` | UniUni |
+| `eliteworks` | `pl_Eliteworks_transform` | Eliteworks |
+| `flavorcloud` | `pl_FlavorCloud_transform` | FlavorCloud |
 
 **Default Case:** Should never execute (validation would have failed earlier). Can optionally add Fail activity.
 
@@ -207,6 +227,29 @@ Each carrier has a different CSV structure. Account numbers appear in different 
 - **Type:** Carrier account ID format (e.g., `ca_589b9b61d0ed420890f0e826515491dd`)
 - **Validation:** Uses `CONTAINS` instead of exact match (folder may have partial ID)
 
+**UniUni:**
+- **Column:** `[Merchant ID]`
+- **ADF Position:** Named column (CSV includes headers)
+- **Schema:** `billing.delta_uniuni_bill.[Merchant ID]`
+- **Type:** Alphanumeric merchant identifier (e.g., `ACCT001`)
+- **Validation:** Exact match required
+
+**Eliteworks:**
+- **Column:** `USER` (Column 3)
+- **ADF Position (Lookup):** `Prop_2` (ordinal position for account validation)
+- **ADF Position (Copy Data):** Named column `user_account` (CSV includes headers)
+- **Schema:** `billing.delta_eliteworks_bill.user_account`
+- **Type:** User account name (e.g., `Falcon IT`)
+- **Validation:** Exact match required
+
+**FlavorCloud:**
+- **Column:** `Origin Location` (Column 7)
+- **ADF Position (Lookup):** `Prop_6` (ordinal position for account validation)
+- **ADF Position (Copy Data):** Named column `[Origin Location]` (CSV includes headers)
+- **Schema:** `billing.delta_flavorcloud_bill.[Origin Location]`
+- **Type:** Origin location/account (e.g., `Falcon Fulfillment UT`)
+- **Validation:** Exact match required
+
 ---
 
 ## 3. Child Pipelines: Carrier-Specific Transformation
@@ -219,6 +262,9 @@ Each carrier has a dedicated child pipeline that processes billing data through 
 - `pl_DHL_transform` (DHL)
 - `pl_UPS_transform` (UPS)
 - `pl_USPS_transform` (USPS EasyPost)
+- `pl_UniUni_transform` (UniUni)
+- `pl_Eliteworks_transform` (Eliteworks)
+- `pl_FlavorCloud_transform` (FlavorCloud)
 
 ### Parameters Received
 
@@ -256,6 +302,9 @@ flowchart TD
 - DHL: `billing.delta_dhl_bill`
 - UPS: `billing.delta_ups_bill`
 - USPS EasyPost: `billing.delta_usps_easypost_bill`
+- UniUni: `billing.delta_uniuni_bill`
+- Eliteworks: `billing.delta_eliteworks_bill`
+- FlavorCloud: `billing.delta_flavorcloud_bill`
 
 **Configuration Options (carrier-specific):**
 
@@ -265,7 +314,7 @@ flowchart TD
 - **Column Mapping:** Empty (strict ordinal positioning - Column 1 → Column 1)
 - **Reason:** Bypasses ADF's duplicate column name errors; FedEx CSVs have 50+ charge columns with duplicate names
 
-**USPS EasyPost (Named Column Mapping):**
+**USPS EasyPost, UniUni, Eliteworks, FlavorCloud (Named Column Mapping):**
 - **First Row as Header:** Checked (reads column names from CSV)
 - **Skip Line Count:** 0 (header row defines schema)
 - **Column Mapping:** Automatic by column name
@@ -286,6 +335,9 @@ flowchart TD
 - `dhl_transform/Insert_ELT_&_CB.sql`
 - `ups_transform/Insert_ELT_&_CB.sql`
 - `usps_easypost_transform/Insert_ELT_&_CB.sql`
+- `uniuni_transform/Insert_ELT_&_CB.sql`
+- `eliteworks_transform/Insert_ELT_&_CB.sql`
+- `flavorcloud_transform/Insert_ELT_&_CB.sql`
 
 **Input Parameters:**
 - `@Carrier_id` (or `@carrier_id`): From parent pipeline parameter `p_carrier_id`
@@ -312,6 +364,9 @@ flowchart TD
   - `billing.dhl_bill` (DHL line items)
   - `billing.ups_bill` (UPS line items)
   - `billing.usps_easypost_bill` (USPS EasyPost line items)
+  - `billing.uniuni_bill` (UniUni line items)
+  - `billing.eliteworks_bill` (Eliteworks line items)
+  - `billing.flavorcloud_bill` (FlavorCloud line items)
 - **Contains:** Shipment-level details with `carrier_bill_id` foreign key
 - **Grain:** One row per shipment (varies by carrier)
 - **Idempotency:** `NOT EXISTS (carrier_bill_id, tracking_number, ...)` with carrier-specific checks
@@ -336,6 +391,9 @@ flowchart TD
 | DHL | `account_number` | `0022161907` |
 | UPS | `[Account Number]` | `000017X1R2` |
 | USPS EasyPost | `carrier_account_id` | `ca_589b9b61d0ed420890f0e826515491dd` |
+| UniUni | `[Merchant ID]` | `ACCT001` |
+| Eliteworks | `user_account` | `Falcon IT` |
+| FlavorCloud | `[Origin Location]` | `Falcon Fulfillment UT` |
 
 **SQL Pattern (all carriers):**
 ```sql
@@ -378,6 +436,9 @@ HAVING NOT EXISTS (
 - `dhl_transform/Sync_Reference_Data.sql`
 - `ups_transform/Sync_Reference_Data.sql`
 - `usps_easypost_transform/Sync_Reference_Data.sql`
+- `uniuni_transform/Sync_Reference_Data.sql`
+- `eliteworks_transform/Sync_Reference_Data.sql`
+- `flavorcloud_transform/Sync_Reference_Data.sql`
 
 **Input Parameters:**
 - `@Carrier_id` (or `@carrier_id`): From parent pipeline parameter `p_carrier_id`
@@ -423,6 +484,18 @@ HAVING NOT EXISTS (
 - Discovers service types from `service` column (e.g., 'GroundAdvantage', 'Priority')
 - Extracts charges from fee columns (postage_fee, label_fee, insurance_fee)
 
+**UniUni:**
+- Discovers service types from `service_type` column (e.g., 'Ground Service', 'Express')
+- Charge types pre-populated via one-time setup script (17 charge types: Base Rate, Discount Fee, Signature Fee, etc.)
+
+**Eliteworks:**
+- Discovers service types from `service_method` column (e.g., 'Ground Advantage')
+- Charge types pre-populated via one-time setup script (1 charge type: Platform Charged)
+
+**FlavorCloud:**
+- Discovers service types from `service_level` column (e.g., 'STANDARD', 'EXPRESS')
+- Charge types pre-populated via one-time setup script (6 charge types: Shipping Charges, Commissions, Duties, Taxes, Fees, Insurance)
+
 **Purpose Explanation:** This script automatically maintains lookup tables by discovering new values from live data. When carriers introduce new service types or charge descriptions, they're automatically captured and added to reference tables for future lookups. The auto-discovery approach eliminates manual reference data maintenance and ensures downstream transformations always have valid foreign key mappings. Categorization logic applies business rules (e.g., charges containing 'adjustment' → category 16, others → category 11).
 
 ---
@@ -436,6 +509,9 @@ HAVING NOT EXISTS (
 - `dhl_transform/Insert_Unified_tables.sql`
 - `ups_transform/Insert_Unified_tables.sql`
 - `usps_easypost_transform/Insert_Unified_tables.sql`
+- `uniuni_transform/Insert_Unified_tables.sql`
+- `eliteworks_transform/Insert_Unified_tables.sql`
+- `flavorcloud_transform/Insert_Unified_tables.sql`
 
 **Input Parameters:**
 - `@Carrier_id` (or `@carrier_id`): From parent pipeline parameter `p_carrier_id`
@@ -465,6 +541,9 @@ HAVING NOT EXISTS (
   - **DHL:** Differentiates international vs domestic tracking numbers
   - **UPS:** Handles wide charge format (one row per charge per tracking number)
   - **USPS EasyPost:** Simple 1:1 mapping from staging
+  - **UniUni:** Wide charge format (17 charge columns unpivoted), uses dimensional weight for billing
+  - **Eliteworks:** Single charge per shipment (Platform Charged), weight already in OZ, dimensions already in IN
+  - **FlavorCloud:** Wide charge format (6 charge columns unpivoted: Shipping Charges, Commissions, Duties, Taxes, Fees, Insurance)
 
 **Part 2: Shipment Charges**
 - **Table:** `billing.shipment_charges`
@@ -488,6 +567,30 @@ FedEx billing includes MPS groups where multiple packages share one master track
 - `MPS_HEADER`: Group summary row (filtered out, not an actual package)
 - `MPS_PARENT`: First package in MPS group
 - `MPS_CHILD`: Additional packages in group
+
+**UniUni-Specific: Wide Charge Format with Dimensional Weight**
+
+UniUni billing uses a wide-format CSV where each row represents one complete shipment with all charges in separate columns:
+
+**Charge Structure (17 charge types unpivoted):**
+- **Base Charges:** Base Rate, Discount Fee, Billed Fee
+- **Service Charges:** Signature Fee, Pick Up Fee, Relabel Fee
+- **Surcharges:** Over Dimension Fee, Over Max Size Fee, Over Weight Fee, Fuel Surcharge, Peak Season Surcharge, Delivery Area Surcharge, Delivery Area Surcharge Extend, Truck Fee, Credit Card Surcharge
+- **Credits:** Miscellaneous Fee, Credit (negative), Approved Claim (negative)
+
+**Weight Logic:**
+- Uses `dim_weight` (dimensional weight) as primary billing weight
+- Multiple weight fields available: billable_weight, scaled_weight, dim_weight
+- Dimensional weight = (length × width × height) ÷ divisor
+
+**Unit Conversions:**
+- Weight: LBS × 16 → OZ, OZS → OZ
+- Dimensions: CM × 0.393701 → IN, IN → IN (no conversion)
+
+**Charge Type Management:**
+- Charge types pre-populated via one-time setup script (not auto-discovered)
+- Only shipping methods are auto-discovered from billing data
+- Only non-zero charges inserted into `shipment_charges` table
 
 **Transaction Boundaries:** 
 - **Transactional:** No (two separate INSERT statements)
@@ -807,6 +910,15 @@ Each transformation activity returns row counts for monitoring:
 | **USPS EasyPost** | `usps_easypost_transform/Insert_ELT_&_CB.sql` | Staging → Normalized (transactional) | 1st |
 | | `usps_easypost_transform/Sync_Reference_Data.sql` | Auto-discover shipping methods and charge types | 2nd |
 | | `usps_easypost_transform/Insert_Unified_tables.sql` | Normalized → Unified | 3rd |
+| **UniUni** | `uniuni_transform/Insert_ELT_&_CB.sql` | Staging → Normalized (transactional) | 1st |
+| | `uniuni_transform/Sync_Reference_Data.sql` | Auto-discover shipping methods (charge types pre-populated) | 2nd |
+| | `uniuni_transform/Insert_Unified_tables.sql` | Normalized → Unified (unpivots 17 charge columns) | 3rd |
+| **Eliteworks** | `eliteworks_transform/Insert_ELT_&_CB.sql` | Staging → Normalized (transactional) | 1st |
+| | `eliteworks_transform/Sync_Reference_Data.sql` | Auto-discover shipping methods (charge types pre-populated) | 2nd |
+| | `eliteworks_transform/Insert_Unified_tables.sql` | Normalized → Unified (single charge: Platform Charged) | 3rd |
+| **FlavorCloud** | `flavorcloud_transform/Insert_ELT_&_CB.sql` | Staging → Normalized (transactional) | 1st |
+| | `flavorcloud_transform/Sync_Reference_Data.sql` | Auto-discover shipping methods (charge types pre-populated) | 2nd |
+| | `flavorcloud_transform/Insert_Unified_tables.sql` | Normalized → Unified (unpivots 6 charge columns) | 3rd |
 
 ### Documentation
 
@@ -818,6 +930,9 @@ Each transformation activity returns row counts for monitoring:
 | `dhl_transform/additional_reference.md` | DHL-specific reference documentation |
 | `ups_transform/UPS_reference_doc.md` | UPS-specific reference documentation |
 | `usps_easypost_transform/IMPLEMENTATION_SUMMARY.md` | USPS EasyPost implementation notes |
+| `uniuni_transform/UniUni_reference_doc.md` | UniUni-specific reference documentation (17 charge types, unit conversions) |
+| `eliteworks_transform/Eliteworks_Business_Reference.md` | Eliteworks business context (single charge, invoice grouping, no unit conversion) |
+| `flavorcloud_transform/FlavorCloud_Business_Reference.md` | FlavorCloud business context (6 charge types, international shipping, DDP) |
 | `techdebt.md` | Known technical debt and planned improvements |
 | `architecture.md` | This document - pipeline architecture and orchestration |
 
@@ -831,6 +946,9 @@ Each transformation activity returns row counts for monitoring:
 - `pl_DHL_transform` - DHL transformation pipeline
 - `pl_UPS_transform` - UPS transformation pipeline
 - `pl_USPS_transform` - USPS EasyPost transformation pipeline
+- `pl_UniUni_transform` - UniUni transformation pipeline
+- `pl_Eliteworks_transform` - Eliteworks transformation pipeline
+- `pl_FlavorCloud_transform` - FlavorCloud transformation pipeline
 
 ### Example CSV Files
 
@@ -840,3 +958,6 @@ Each transformation activity returns row counts for monitoring:
 | DHL | `dhl_transform/dhl_example_bill.csv` | HDR/DTL record types |
 | UPS | `ups_transform/ups_example_bill.csv` | Narrow format (one charge per row) |
 | USPS EasyPost | `usps_easypost_transform/usps_easypost_example_bill.csv` | Clean CSV with headers |
+| UniUni | `uniuni_transform/uniuni_example_bill.csv` | Wide format with 17 charge columns, uses dimensional weight |
+| Eliteworks | `eliteworks_transform/eliteworks_example_bill.csv` | Single charge per shipment (Platform Charged), weight in OZ, dimensions in IN |
+| FlavorCloud | `flavorcloud_transform/flavorcloud_example_bill.csv` | Wide format with 6 charge columns (international shipping) |

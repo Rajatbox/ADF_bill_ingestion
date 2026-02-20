@@ -1366,3 +1366,87 @@ OUTER APPLY (
 WHERE NULLIF(v.charge_type, '') IS NOT NULL
   AND v.charge_amount IS NOT NULL
   AND v.charge_amount <> 0;
+
+-----------------------------------------------------------------------------------------------------------------
+-- View: Reconciliation Variance Analysis
+-----------------------------------------------------------------------------------------------------------------
+-- Purpose: Identifies cost and weight variances between WMS and carrier billed amounts
+-- Design: Multi-stage CTE approach with gated variance logic (weight only flagged if cost is exception)
+-- Usage: Reconciliation dashboard and exception reporting
+-- Note: References shipment_package table (WMS source data)
+
+CREATE VIEW dbo.vw_recon_variance AS
+WITH standardized_weights AS (
+    SELECT 
+        shipment_package_id,
+        tracking_number,
+        -- Standardize units for the audit
+        CEILING(actual_weight_oz / 16.0) AS actual_weight_lb,
+        billed_weight_oz / 16.0 AS billed_weight_lb,
+        billed_weight_oz,
+        CEILING(actual_weight_oz) AS actual_weight_oz,
+        wms_shipping_cost,
+        billed_shipping_cost 
+    FROM shipment_package
+),
+cost_audit AS (
+    SELECT 
+        *,
+        CASE 
+            WHEN [billed_shipping_cost] > [wms_shipping_cost] * 1.1 OR [billed_shipping_cost] < [wms_shipping_cost] * 0.9 THEN 1 
+            ELSE 0 
+        END AS is_cost_exception,
+        CASE 
+            WHEN [billed_shipping_cost] > [wms_shipping_cost] * 1.1 THEN 'cost_high' 
+            WHEN [billed_shipping_cost] < [wms_shipping_cost] * 0.9 THEN 'cost_low' 
+            ELSE 'Normal' 
+        END AS cost_exception_type,
+        CONVERT(DECIMAL(10,2), [billed_shipping_cost] - [wms_shipping_cost]) AS cost_variance_amount
+    FROM standardized_weights
+),
+weight_audit AS (
+    SELECT
+        *,
+        -- 1. Weight Exception Flag (Gated by is_cost_exception)
+        CASE 
+            WHEN is_cost_exception = 0 THEN 0 -- If cost is normal, weight is ignored
+            WHEN billed_weight_oz < 16 THEN
+                CASE 
+                    WHEN billed_weight_oz > (actual_weight_oz * 1.1) OR billed_weight_oz < (actual_weight_oz * 0.9) THEN 1 
+                    ELSE 0 
+                END
+            ELSE
+                CASE 
+                    WHEN billed_weight_lb > (actual_weight_lb * 1.1) OR billed_weight_lb < (actual_weight_lb * 0.9) THEN 1 
+                    ELSE 0 
+                END
+        END AS is_weight_exception,
+
+        -- 2. Exception Type (Gated by is_cost_exception)
+        CASE 
+            WHEN is_cost_exception = 0 THEN 'Normal' -- If cost is normal, type is Normal
+            WHEN billed_weight_oz < 16 THEN
+                CASE 
+                    WHEN billed_weight_oz > (actual_weight_oz * 1.1) THEN 'weight_high' 
+                    WHEN billed_weight_oz < (actual_weight_oz * 0.9) THEN 'weight_low' 
+                    ELSE 'Normal' 
+                END
+            ELSE
+                CASE 
+                    WHEN billed_weight_lb > (actual_weight_lb * 1.1) THEN 'weight_high' 
+                    WHEN billed_weight_lb < (actual_weight_lb * 0.9) THEN 'weight_low' 
+                    ELSE 'Normal' 
+                END
+        END AS weight_exception_type,
+
+        -- 3. Weight Variance Percent (Always calculated for data visibility)
+        CASE 
+            WHEN ISNULL(actual_weight_oz, 0) = 0 THEN 100.0
+            WHEN billed_weight_oz < 16 THEN
+                CAST(((billed_weight_oz - actual_weight_oz) / CAST(NULLIF(actual_weight_oz, 0) AS FLOAT)) * 100 AS DECIMAL(10,2))
+            ELSE
+                CAST(((billed_weight_lb - actual_weight_lb) / CAST(NULLIF(actual_weight_lb, 0) AS FLOAT)) * 100 AS DECIMAL(10,2))
+        END AS weight_variance_percent
+    FROM cost_audit
+)
+SELECT * FROM weight_audit WHERE is_cost_exception = 1;

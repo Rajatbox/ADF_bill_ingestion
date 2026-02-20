@@ -25,6 +25,8 @@ DECLARE @ActualAccountInFile NVARCHAR(100) = CASE
     WHEN @InputCarrier = 'dhl'   THEN JSON_VALUE(@RawJson, '$.Prop_1')
     WHEN @InputCarrier = 'ups'   THEN JSON_VALUE(@RawJson, '$.Prop_2')
     WHEN @InputCarrier = 'usps - easy post' THEN JSON_VALUE(@RawJson, '$.Prop_32')
+    WHEN @InputCarrier = 'eliteworks' THEN JSON_VALUE(@RawJson, '$.Prop_2')  -- Column 3: USER
+    WHEN @InputCarrier = 'flavorcloud' THEN JSON_VALUE(@RawJson, '$.Prop_6')  -- Column 7: Origin Location
     ELSE 'UNKNOWN_CARRIER'
 END;
 
