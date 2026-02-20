@@ -92,7 +92,14 @@ BEGIN TRY
 
     /*
     ================================================================================
-    Part 3: Insert itemized charges into cost ledger with matching status
+    Part 3: Insert itemized charges into cost ledger with variance-based status
+    ================================================================================
+    Uses vw_recon_variance for intelligent status resolution:
+    - Weight exceptions only flagged if cost variance exists (gated logic)
+    - Status reflects combined cost + weight analysis
+    - Unknown: No WMS match found
+    - Matched: WMS match found, no variances
+    - Cost/Weight exceptions: From variance view
     ================================================================================
     */
     INSERT INTO dbo.carrier_cost_ledger (
@@ -130,13 +137,13 @@ BEGIN TRY
         sc.carrier_bill_id,
         sc.shipment_attribute_id,
         CASE 
-            -- 1. If it's a weight exception, use the type from SPW
-            WHEN spw.is_weight_exception = 1 THEN spw.weight_exception_type
-            -- 2. If not weight but cost exception, use the type from SPW
-            WHEN spw.is_cost_exception = 1 THEN spw.cost_exception_type
-            -- 3. If it's matched but weight/cost are fine
+            -- 1. If variance view found a weight exception (gated by cost exception)
+            WHEN rv.is_weight_exception = 1 THEN rv.weight_exception_type
+            -- 2. If variance view found a cost exception (but not weight)
+            WHEN rv.is_cost_exception = 1 THEN rv.cost_exception_type
+            -- 3. If WMS match exists but no exceptions
             WHEN spw.shipment_package_id IS NOT NULL THEN 'matched'
-            -- 4. If it's not found in the shipment_package table
+            -- 4. No WMS match found
             ELSE 'unknown'
         END AS status
     FROM 
@@ -158,6 +165,9 @@ BEGIN TRY
     LEFT JOIN 
         dbo.shipment_package AS spw
         ON spw.tracking_number = sc.tracking_number
+    LEFT JOIN 
+        dbo.vw_recon_variance AS rv
+        ON rv.shipment_package_id = spw.shipment_package_id
     LEFT JOIN 
         dbo.shipment AS sw
         ON sw.shipment_id = spw.shipment_id
