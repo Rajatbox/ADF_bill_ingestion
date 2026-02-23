@@ -223,7 +223,7 @@ Each carrier has a different CSV structure. Account numbers appear in different 
 **USPS EasyPost:**
 - **Column:** `carrier_account_id`
 - **ADF Position:** Named column (CSV includes headers)
-- **Schema:** `billing.delta_usps_easypost_bill.carrier_account_id`
+- **Schema:** `billing.delta_easypost_bill.carrier_account_id`
 - **Type:** Carrier account ID format (e.g., `ca_589b9b61d0ed420890f0e826515491dd`)
 - **Validation:** Uses `CONTAINS` instead of exact match (folder may have partial ID)
 
@@ -301,7 +301,7 @@ flowchart TD
 - FedEx: `billing.delta_fedex_bill`
 - DHL: `billing.delta_dhl_bill`
 - UPS: `billing.delta_ups_bill`
-- USPS EasyPost: `billing.delta_usps_easypost_bill`
+- EasyPost: `billing.delta_easypost_bill`
 - UniUni: `billing.delta_uniuni_bill`
 - Eliteworks: `billing.delta_eliteworks_bill`
 - FlavorCloud: `billing.delta_flavorcloud_bill`
@@ -629,7 +629,7 @@ flowchart LR
         DeltaFedex[delta_fedex_bill]
         DeltaDHL[delta_dhl_bill]
         DeltaUPS[delta_ups_bill]
-        DeltaUSPS[delta_usps_easypost_bill]
+        DeltaEasyPost[delta_easypost_bill]
     end
     
     subgraph Normalized [Normalized Layer]

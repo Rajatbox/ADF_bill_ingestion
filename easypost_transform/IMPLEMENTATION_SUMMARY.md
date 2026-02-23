@@ -73,7 +73,7 @@ CONCAT(carrier_account_id, '-', FORMAT(CAST(created_at AS DATE), 'yyyy-MM-dd'))
 
 ### Schema Status
 
-✅ **Normalized table (`billing.usps_easy_post_bill`) already exists**  
+✅ **Normalized table (`billing.easypost_bill`) already exists**  
 ⚠️ **Delta table needs to be created**
 
 ### Add to `schema.sql`:
@@ -81,7 +81,7 @@ CONCAT(carrier_account_id, '-', FORMAT(CAST(created_at AS DATE), 'yyyy-MM-dd'))
 #### 1. Delta Table (Staging) - **NEEDS TO BE CREATED**
 
 ```sql
-CREATE TABLE billing.delta_usps_easypost_bill (
+CREATE TABLE billing.delta_easypost_bill (
     -- 33 columns matching CSV structure
     [created_at] varchar(50) NULL,
     [id] varchar(100) NULL,
@@ -122,7 +122,7 @@ CREATE TABLE billing.delta_usps_easypost_bill (
 #### 2. Normalized Carrier Table (ELT) - **EXISTING SCHEMA**
 
 ```sql
-CREATE TABLE billing.usps_easy_post_bill (
+CREATE TABLE billing.easypost_bill (
     id bigint IDENTITY(1,1) NOT NULL,
     tracking_code varchar(40) NULL,
     invoice_number varchar(200) NOT NULL,
@@ -157,7 +157,7 @@ CREATE TABLE billing.usps_easy_post_bill (
 
 | Aspect | Original Design | Your Existing Schema | Impact |
 |--------|----------------|---------------------|---------|
-| **Table Name** | `billing.usps_easypost_bill` | `billing.usps_easy_post_bill` | All scripts updated |
+| **Table Name** | `billing.usps_easypost_bill` | `billing.easypost_bill` | All scripts updated |
 | **carrier_bill_id** | Foreign key column | ✅ Present | Inserted in Step 2 and reused downstream |
 | **Timestamp** | `created_date` | `created_at` | All WHERE clauses updated |
 | **usps_zone type** | `varchar` | `tinyint` | Added CAST in INSERT |
@@ -167,7 +167,7 @@ CREATE TABLE billing.usps_easy_post_bill (
 ### Scripts Modified to Match Schema
 
 **1. Insert_ELT_&_CB.sql**
-- Changed table to `billing.usps_easy_post_bill`
+- Changed table to `billing.easypost_bill`
 - Removed columns not in your schema
 - Added `carrier_bill_id` in Step 2 INSERT
 - Changed idempotency to `(carrier_bill_id, tracking_code)`
@@ -175,23 +175,23 @@ CREATE TABLE billing.usps_easy_post_bill (
 - Use `[length]` with square brackets (reserved word)
 
 **2. Sync_Reference_Data.sql**
-- Table reference: `billing.usps_easy_post_bill`
+- Table reference: `billing.easypost_bill`
 - Timestamp column: `created_at` instead of `created_date`
 - **Removed charge types sync** - charge types are static and seeded separately (manual INSERT)
 - Only syncs shipping methods (dynamic, discovered from data)
 
 **3. Insert_Unified_tables.sql**
-- Table reference: `billing.usps_easy_post_bill`
+- Table reference: `billing.easypost_bill`
 - Uses `u.carrier_bill_id` directly (no lookup JOIN needed)
 - Use `[length]` with square brackets
 - Cast `usps_zone` to varchar for destination_zone
 
 **4. validation_billing.sql**
-- Updated table reference to `billing.usps_easy_post_bill`
+- Updated table reference to `billing.easypost_bill`
 
 ### Critical Pattern: carrier_bill_id Population
 
-`carrier_bill_id` is written into `billing.usps_easy_post_bill` during Step 2 in `Insert_ELT_&_CB.sql`:
+`carrier_bill_id` is written into `billing.easypost_bill` during Step 2 in `Insert_ELT_&_CB.sql`:
 
 ```sql
 INNER JOIN billing.carrier_bill cb
@@ -211,7 +211,7 @@ Downstream scripts reuse `u.carrier_bill_id` directly for idempotency and insert
 ```
 1. LookupCarrierInfo.sql
    ↓ (@Carrier_id, @lastrun)
-2. Copy Activity: CSV → delta_usps_easypost_bill
+2. Copy Activity: CSV → delta_easypost_bill
    ↓
 3. Insert_ELT_&_CB.sql (TRANSACTION)
    ↓
@@ -227,7 +227,7 @@ Downstream scripts reuse `u.carrier_bill_id` directly for idempotency and insert
 ### Copy Activity Setup
 
 **Source:** USPS EasyPost CSV file  
-**Sink:** `billing.delta_usps_easypost_bill`  
+**Sink:** `billing.delta_easypost_bill`  
 **Mapping:** Direct 1:1 (all 33 columns as VARCHAR)
 
 **No Data Flow Required** - All transformations handled in SQL
@@ -284,10 +284,10 @@ Downstream scripts reuse `u.carrier_bill_id` directly for idempotency and insert
 
 Copy the delta table CREATE TABLE statement (lines 87-112) into your `schema.sql` file or execute directly in DEV environment.
 
-**Note:** Normalized table `billing.usps_easy_post_bill` exists. Add `carrier_bill_id` column if missing:
+**Note:** Normalized table `billing.easypost_bill` exists. Add `carrier_bill_id` column if missing:
 
 ```sql
-ALTER TABLE billing.usps_easy_post_bill
+ALTER TABLE billing.easypost_bill
 ADD carrier_bill_id int NULL;
 ```
 

@@ -25,7 +25,7 @@ Purpose: Two-part idempotent population script:
          It's calculated on-the-fly via vw_shipment_summary view from shipment_charges
          (single source of truth). This eliminates sync issues and ensures correctness.
 
-Sources:  billing.usps_easy_post_bill + carrier_bill JOIN (file_id filtered)
+Sources:  billing.easypost_bill + carrier_bill JOIN (file_id filtered)
 Targets:  billing.shipment_attributes (business key: carrier_id + tracking_number)
           billing.shipment_charges (with shipment_attribute_id FK)
 Joins:    dbo.charge_types (charge_type_id lookup)
@@ -92,7 +92,8 @@ BEGIN TRY
         billed_weight_oz,
         billed_length_in,
         billed_width_in,
-        billed_height_in
+        billed_height_in,
+        integrated_carrier_id
     )
     SELECT
         @Carrier_id AS carrier_id,
@@ -107,10 +108,19 @@ BEGIN TRY
         -- Dimensions: Already in IN (no conversion needed)
         u.[length] AS billed_length_in,
         u.width AS billed_width_in,
-        u.height AS billed_height_in
+        u.height AS billed_height_in,
+        
+        -- NEW: Get integrated_carrier_id from shipping_method
+        sm.integrated_carrier_id
     FROM
-        billing.usps_easy_post_bill u
+        billing.easypost_bill u
         JOIN billing.carrier_bill cb ON cb.carrier_bill_id = u.carrier_bill_id
+        LEFT JOIN dbo.carrier c 
+            ON LOWER(c.carrier_name) = LOWER(u.integrated_carrier)
+        LEFT JOIN dbo.shipping_method sm 
+            ON sm.carrier_id = @Carrier_id 
+            AND sm.method_name = u.service
+            AND sm.integrated_carrier_id = c.carrier_id
     WHERE
         cb.file_id = @File_id  -- File-based filtering
         AND u.tracking_code IS NOT NULL
@@ -174,7 +184,7 @@ BEGIN TRY
         charges.amount,
         sa.id AS shipment_attribute_id
     FROM
-        billing.usps_easy_post_bill u
+        billing.easypost_bill u
     -- Unpivot 5 charge types using CROSS APPLY
     CROSS APPLY (
         VALUES 

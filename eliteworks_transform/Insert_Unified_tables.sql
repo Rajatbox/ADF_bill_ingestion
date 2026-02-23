@@ -95,7 +95,8 @@ BEGIN TRY
         billed_weight_oz,
         billed_length_in,
         billed_width_in,
-        billed_height_in
+        billed_height_in,
+        integrated_carrier_id
     )
     SELECT
         @Carrier_id AS carrier_id,
@@ -110,10 +111,19 @@ BEGIN TRY
         -- Dimensions: Already in IN (no conversion needed)
         e.package_length_in AS billed_length_in,
         e.package_width_in AS billed_width_in,
-        e.package_height_in AS billed_height_in
+        e.package_height_in AS billed_height_in,
+        
+        -- NEW: Get integrated_carrier_id from shipping_method
+        sm.integrated_carrier_id
     FROM
         billing.eliteworks_bill e
-    JOIN billing.carrier_bill cb ON cb.carrier_bill_id = e.carrier_bill_id
+        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = e.carrier_bill_id
+        LEFT JOIN dbo.carrier c 
+            ON LOWER(c.carrier_name) = LOWER(e.integrated_carrier)
+        LEFT JOIN dbo.shipping_method sm 
+            ON sm.carrier_id = @Carrier_id 
+            AND sm.method_name = e.service_method
+            AND sm.integrated_carrier_id = c.carrier_id
     WHERE
         cb.file_id = @File_id  -- FILE-BASED FILTERING
         AND e.tracking_number IS NOT NULL

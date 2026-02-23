@@ -226,8 +226,8 @@ CREATE TABLE billing.delta_fedex_bill ( -- rename to delta_fedex_bill
 	[Shipment Notes] varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 );
 
--- USPS EASYPOST DELTA TABLE
-CREATE TABLE billing.delta_usps_easypost_bill (
+-- EASYPOST DELTA TABLE
+CREATE TABLE billing.delta_easypost_bill (
 	[created_at] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[id] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[tracking_code] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -826,8 +826,8 @@ ON billing.fedex_bill (created_date);
 CREATE NONCLUSTERED INDEX IX_fedex_bill_tracking_number_invoice
 ON billing.fedex_bill (express_or_ground_tracking_id, invoice_number, invoice_date);
 
--- USPS EASYPOST BILL TABLE
-CREATE TABLE billing.usps_easy_post_bill (
+-- EASYPOST BILL TABLE
+CREATE TABLE billing.easypost_bill (
 	id bigint IDENTITY(1,1) NOT NULL,
 	tracking_code varchar(40) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	invoice_number varchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -846,8 +846,9 @@ CREATE TABLE billing.usps_easy_post_bill (
 	carbon_offset_fee decimal(18,2) NULL,
 	bill_date datetime2(0) NOT NULL,
 	service varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	integrated_carrier varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,  -- NEW: Actual carrier name (USPS, FedEx, UPS, etc.)
 	created_at datetime2(0) DEFAULT sysdatetime() NOT NULL,
-	CONSTRAINT PK__usps_eas__3213E83F62CA7274 PRIMARY KEY (id)
+	CONSTRAINT PK__easypost__3213E83F62CA7274 PRIMARY KEY (id)
 );
 
 --UPS BILL TABLE
@@ -957,6 +958,7 @@ CREATE TABLE billing.eliteworks_bill (
     to_state NVARCHAR(50) NULL,
     to_country NVARCHAR(10) NULL,
     shipment_status NVARCHAR(50) NULL,
+    integrated_carrier NVARCHAR(50) NULL,  -- NEW: Actual carrier name (USPS, FedEx, UPS, etc.)
     created_date DATETIME2 DEFAULT SYSDATETIME() NOT NULL,
     
     CONSTRAINT PK_eliteworks_bill PRIMARY KEY (id),
@@ -1032,6 +1034,15 @@ ON billing.flavorcloud_bill (tracking_number, invoice_number, invoice_date);
 GOLD LAYER TABLES
 ================================================================================
 */
+
+/*
+Note: dbo.carrier table (reference table - assumed to exist in database)
+New column added via migration: is_aggregator BIT DEFAULT 0 NULL
+  - Identifies if carrier is an aggregator (Eliteworks, EasyPost, Passport, FlavorCloud)
+  - NULL/0 = direct carrier (FedEx, UPS, USPS, DHL)
+  - 1 = aggregator
+*/
+
 CREATE TABLE billing.carrier_bill ( -- rename to carrier_bill
 	carrier_bill_id int IDENTITY(1,1) NOT NULL,
 	bill_id int NULL,
@@ -1106,16 +1117,34 @@ CREATE TABLE dbo.shipping_method (
 	average_transit_days decimal(18,4) NULL,
 	guaranteed_delivery bit NULL,
 	is_active bit NULL,
-	CONSTRAINT PK__shipping__DCF5023B0C181765 PRIMARY KEY (shipping_method_id)
+	integrated_carrier_id int NULL,  -- NEW: FK to actual carrier when using aggregator (NULL = direct carrier)
+	CONSTRAINT PK__shipping__DCF5023B0C181765 PRIMARY KEY (shipping_method_id),
+	CONSTRAINT FK_shipping_method_carrier 
+		FOREIGN KEY (carrier_id) 
+		REFERENCES dbo.carrier(carrier_id),
+	CONSTRAINT FK_shipping_method_integrated_carrier 
+		FOREIGN KEY (integrated_carrier_id) 
+		REFERENCES dbo.carrier(carrier_id)
 );
 
--- Unique constraint: Prevent duplicate shipping methods per carrier
+-- Unique constraint: Prevent duplicate shipping methods for direct carriers
 CREATE UNIQUE NONCLUSTERED INDEX UQ_shipping_method_carrier_name
-ON dbo.shipping_method (carrier_id, method_name);
+ON dbo.shipping_method (carrier_id, method_name)
+WHERE integrated_carrier_id IS NULL;
+
+-- Unique constraint: Prevent duplicate shipping methods for aggregator+carrier combinations
+CREATE UNIQUE NONCLUSTERED INDEX UQ_shipping_method_carrier_integrated_method
+ON dbo.shipping_method (carrier_id, integrated_carrier_id, method_name)
+WHERE integrated_carrier_id IS NOT NULL;
 
 -- Index for carrier-based lookups
 CREATE NONCLUSTERED INDEX IX_shipping_method_carrier_active
 ON dbo.shipping_method (carrier_id, is_active);
+
+-- Index for integrated carrier lookups
+CREATE NONCLUSTERED INDEX IX_shipping_method_integrated_carrier
+ON dbo.shipping_method (integrated_carrier_id)
+WHERE integrated_carrier_id IS NOT NULL;
 
 -----------------------------------------------------------------------------------------------------------------
 
@@ -1181,6 +1210,7 @@ CREATE TABLE billing.shipment_attributes (
 	billed_length_in decimal(18,2) NULL,
 	billed_width_in decimal(18,2) NULL,
 	billed_height_in decimal(18,2) NULL,
+	integrated_carrier_id int NULL,  -- NEW: FK to actual carrier when using aggregator
 	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
 	updated_date datetime2 DEFAULT sysdatetime() NOT NULL
 	CONSTRAINT PK__shipment__attribute PRIMARY KEY (id)
@@ -1251,6 +1281,52 @@ WHERE carrier_bill_id IS NOT NULL AND charge_type_id IS NOT NULL;
 CREATE NONCLUSTERED INDEX IX_carrier_cost_ledger_shipment_attribute_id
 ON dbo.carrier_cost_ledger (shipment_attribute_id);
 
+-----------------------------------------------------------------------------------------------------------------
+
+CREATE TABLE dbo.global_carrier_markups (
+	id int IDENTITY(1,1) NOT NULL,
+	carrier_id int NOT NULL,
+	shipping_method_id int NOT NULL,
+	markup decimal(18,4) NULL,
+	markup_type nvarchar(20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	is_active bit DEFAULT 1 NOT NULL,
+	created_at datetime2 DEFAULT getdate() NOT NULL,
+	updated_at datetime2 DEFAULT getdate() NOT NULL,
+	updated_by nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	version int DEFAULT 1 NOT NULL,
+	rule_id int NULL,
+	parent_id int NULL,
+	charge_type_id int NULL,
+	zone_id int NULL,
+	valid_from datetime2 NULL,
+	valid_till datetime2 NULL,
+	min_weight decimal(18,4) NULL,
+	max_weight decimal(18,4) NULL,
+	weight_unit nvarchar(20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	created_by nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	charge_category_id int NULL,
+	integrated_carrier_id int NULL,
+	CONSTRAINT PK__global_carrier_markups PRIMARY KEY (id)
+);
+
+
+-- dbo.global_carrier_markups foreign keys
+
+ALTER TABLE dbo.global_carrier_markups ADD CONSTRAINT FK_global_carrier_markups_integrated_carrier_id 
+FOREIGN KEY (integrated_carrier_id) REFERENCES dbo.carrier(carrier_id);
+
+-----------------------------------------------------------------------------------------------------------------
+
+CREATE TABLE dbo.default_markups (
+	id int IDENTITY(1,1) NOT NULL,
+	markup decimal(18,4) NOT NULL,
+	created_at datetime2 DEFAULT getdate() NULL,
+	created_by nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	deleted_at datetime2 DEFAULT NULL NULL,
+	deleted_by nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS DEFAULT NULL NULL,
+	CONSTRAINT PK__default___3213E83FA9DCF407 PRIMARY KEY (id)
+);
+
 /*
 ================================================================================
 GOLD LAYER VIEWS
@@ -1276,6 +1352,7 @@ SELECT
     sa.billed_length_in,
     sa.billed_width_in,
     sa.billed_height_in,
+    sa.integrated_carrier_id,
     sa.created_date,
     sa.updated_date,
     -- Calculated fields from charges
@@ -1288,7 +1365,7 @@ GROUP BY
     sa.id, sa.carrier_id, sa.tracking_number, sa.shipment_date,
     sa.shipping_method, sa.destination_zone, sa.billed_weight_oz,
     sa.billed_length_in, sa.billed_width_in, sa.billed_height_in,
-    sa.created_date, sa.updated_date;
+    sa.integrated_carrier_id, sa.created_date, sa.updated_date;
 
 -----------------------------------------------------------------------------------------------------------------
 -- View: FedEx Charges (Unpivot)

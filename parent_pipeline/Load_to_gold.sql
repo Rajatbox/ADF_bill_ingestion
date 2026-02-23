@@ -18,7 +18,7 @@ Execution Order: Runs after Insert_Unified_tables.sql
 
 SET NOCOUNT ON;
 
-DECLARE @ShipmentsUpdated INT, @PackagesUpdated INT, @LedgerInserted INT;
+DECLARE @ShipmentsUpdated INT, @PackagesUpdated INT, @LedgerInserted INT, @MarkupsInserted INT;
 
 -- Pre-filter shipment_attribute_ids for current file (reused across all 3 operations)
 DECLARE @FileShipments TABLE (
@@ -85,6 +85,7 @@ BEGIN TRY
         dbo.shipping_method AS sm
         ON sm.method_name = vss.shipping_method
         AND sm.carrier_id = vss.carrier_id
+        AND sm.integrated_carrier_id = vss.integrated_carrier_id
     WHERE 
         NULLIF(vss.tracking_number, '') IS NOT NULL;
 
@@ -178,18 +179,58 @@ BEGIN TRY
         NOT EXISTS (
             SELECT 1
             FROM dbo.carrier_cost_ledger AS ccl
-            WHERE ccl.shipment_attribute_id = sc.shipment_attribute_id
-                AND ccl.carrier_bill_id = sc.carrier_bill_id
+            WHERE ccl.carrier_bill_id = sc.carrier_bill_id
+                AND ccl.tracking_number = sc.tracking_number
                 AND ccl.charge_type_id = sc.charge_type_id
         );
 
     SET @LedgerInserted = @@ROWCOUNT;
 
+    /*
+    ================================================================================
+    Part 4: Sync shipping methods with default markups
+    ================================================================================
+    Ensures all shipping methods have a default markup entry in global_carrier_markups.
+    Uses the latest active default markup from default_markups table.
+    Idempotent: Uses NOT EXISTS to prevent duplicates.
+    ================================================================================
+    */
+    INSERT INTO dbo.global_carrier_markups (
+        carrier_id,
+        shipping_method_id,
+        markup,
+        markup_type,
+        integrated_carrier_id
+    )
+    SELECT
+        sm.carrier_id,
+        sm.shipping_method_id,
+        dm.markup,
+        'percentage' AS markup_type,
+        sm.integrated_carrier_id
+    FROM 
+        dbo.shipping_method sm
+    CROSS JOIN (
+        SELECT TOP 1 markup 
+        FROM dbo.default_markups 
+        WHERE deleted_at IS NULL
+        ORDER BY created_at DESC
+    ) dm
+    WHERE 
+        NOT EXISTS (
+            SELECT 1
+            FROM dbo.global_carrier_markups gcm
+            WHERE gcm.shipping_method_id = sm.shipping_method_id
+        );
+
+    SET @MarkupsInserted = @@ROWCOUNT;
+
     SELECT 
         'SUCCESS' AS Status,
         @ShipmentsUpdated AS ShipmentsUpdated,
         @PackagesUpdated AS PackagesUpdated,
-        @LedgerInserted AS LedgerInserted;
+        @LedgerInserted AS LedgerInserted,
+        @MarkupsInserted AS MarkupsInserted;
 
 END TRY
 BEGIN CATCH

@@ -157,7 +157,8 @@ BEGIN TRY
         package_width_in,
         package_height_in,
         from_postal,
-        shipment_status
+        shipment_status,
+        integrated_carrier  -- NEW: Actual carrier name
     )
     SELECT
         -- Foreign key to invoice summary
@@ -192,7 +193,10 @@ BEGIN TRY
         d.from_postal AS from_postal,
         
         -- Status
-        d.status AS shipment_status
+        d.status AS shipment_status,
+        
+        -- Integrated carrier (actual fulfillment carrier - USPS, FedEx, UPS, etc.)
+        NULLIF(TRIM(d.carrier), '') AS integrated_carrier  -- NEW
     FROM billing.delta_eliteworks_bill d
     INNER JOIN billing.carrier_bill cb
         ON cb.carrier_id = @Carrier_id

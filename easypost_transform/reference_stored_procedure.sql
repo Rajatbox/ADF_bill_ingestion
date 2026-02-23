@@ -48,7 +48,7 @@ SET
     FROM dbo.shipment_wip AS s
 	JOIN dbo.shipment_package_wip AS sp
 ON s.shipment_id = sp.shipment_id
-    INNER JOIN elt_stage.usps_easy_post_bill AS usps
+    INNER JOIN elt_stage.easypost_bill AS usps
     ON sp.tracking_number = usps.tracking_code
 WHERE usps.created_at > @MinCreatedDate;
 
@@ -61,7 +61,7 @@ SET  sp.carrier_pickup_date = usps.postage_label_created_at,
      sp.billed_width_in     = TRY_CAST(usps.width AS decimal(10,2)),
      sp.billed_height_in    = TRY_CAST(usps.height AS decimal(10,2))
 FROM dbo.shipment_package_wip AS sp
-INNER JOIN elt_stage.usps_easy_post_bill AS usps
+INNER JOIN elt_stage.easypost_bill AS usps
 ON sp.tracking_number = usps.tracking_code
     LEFT JOIN dbo.shipping_method AS sm
     ON sm.method_name = usps.service
@@ -77,7 +77,7 @@ SELECT
     CAST(usps.bill_date  AS DATE),
     SUM(usps.label_fee + usps.postage_fee + usps.carbon_offset_fee + usps.insurance_fee), --removed rate from addition clause 
     COUNT(usps.tracking_code)
-FROM elt_stage.usps_easy_post_bill AS usps
+FROM elt_stage.easypost_bill AS usps
 WHERE usps.created_at > @MinCreatedDate
 GROUP BY
     usps.invoice_number, CAST(usps.bill_date AS DATE)
@@ -90,7 +90,7 @@ HAVING NOT EXISTS (
 -- 4. insert into shipment_charges
 INSERT INTO dbo.shipment_charges (shipment_id, shipment_package_id, charge_type_id, amount)
 SELECT sp.shipment_id, sp.shipment_package_id, ct.charge_type_id, charges.amount
-FROM elt_stage.usps_easy_post_bill usps
+FROM elt_stage.easypost_bill usps
     CROSS APPLY (VALUES ('Base Rate', usps.rate),
                         ('Label Fee', usps.label_fee),
                         ('Unknown Charges', CAST(usps.postage_fee as float) - CAST(usps.rate as float)), 

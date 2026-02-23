@@ -194,7 +194,7 @@ func (a Adapter2) buildStagingPlan(records [][]any) domain.StagingPlan {
 		Batches: []domain.StagingBatch{
 			{
 				Name:  "usps_easypost_bill",
-				Table: "elt_stage.usps_easy_post_bill",
+				Table: "elt_stage.easypost_bill",
 				Cols:  columns.BillDBColumnNames,
 				Rows:  records,
 				Chunk: 5000,

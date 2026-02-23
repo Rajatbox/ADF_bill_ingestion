@@ -22,7 +22,7 @@ Purpose: Automatically populate and maintain reference/lookup tables by
          Block 1: Sync shipping_method (discovered from data)
          Block 2: ONE-TIME SEED of 5 fixed USPS EasyPost charge types (static)
 
-Source:  billing.usps_easy_post_bill + carrier_bill JOIN (file_id filtered)
+Source:  billing.easypost_bill + carrier_bill JOIN (file_id filtered)
          
 Targets: dbo.shipping_method
          dbo.charge_types (one-time seed of 5 fixed charges)
@@ -65,17 +65,21 @@ BEGIN TRY
         method_name,
         service_level,
         guaranteed_delivery,
-        is_active
+        is_active,
+        integrated_carrier_id  -- NEW: FK to actual carrier
     )
     SELECT DISTINCT
         @Carrier_id AS carrier_id,
         u.service AS method_name,
         'Standard' AS service_level,
         0 AS guaranteed_delivery,
-        1 AS is_active
+        1 AS is_active,
+        c.carrier_id AS integrated_carrier_id  -- NEW: Lookup carrier_id from carrier name
     FROM 
-        billing.usps_easy_post_bill u
+        billing.easypost_bill u
         JOIN billing.carrier_bill cb ON cb.carrier_bill_id = u.carrier_bill_id
+        LEFT JOIN dbo.carrier c 
+            ON LOWER(c.carrier_name) = LOWER(u.integrated_carrier)  -- NEW: Case-insensitive match
     WHERE 
         cb.file_id = @File_id  -- File-based filtering
         AND u.service IS NOT NULL
@@ -85,6 +89,7 @@ BEGIN TRY
             FROM dbo.shipping_method sm
             WHERE sm.method_name = u.service
                 AND sm.carrier_id = @Carrier_id
+                AND sm.integrated_carrier_id = c.carrier_id
         );
 
     SET @ShippingMethodsAdded = @@ROWCOUNT;

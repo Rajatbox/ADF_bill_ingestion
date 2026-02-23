@@ -70,17 +70,21 @@ BEGIN TRY
         method_name,
         service_level,
         guaranteed_delivery,
-        is_active
+        is_active,
+        integrated_carrier_id  -- NEW: FK to actual carrier
     )
     SELECT DISTINCT
         @Carrier_id AS carrier_id,
         e.service_method AS method_name,
         'Standard' AS service_level,
         0 AS guaranteed_delivery,
-        1 AS is_active
+        1 AS is_active,
+        c.carrier_id AS integrated_carrier_id  -- NEW: Lookup carrier_id from carrier name
     FROM 
         billing.eliteworks_bill e
     JOIN billing.carrier_bill cb ON cb.carrier_bill_id = e.carrier_bill_id
+    LEFT JOIN dbo.carrier c 
+        ON LOWER(c.carrier_name) = LOWER(e.integrated_carrier)  -- NEW: Case-insensitive match
     WHERE 
         cb.file_id = @File_id  -- FILE-BASED FILTERING
         AND e.service_method IS NOT NULL
@@ -90,6 +94,7 @@ BEGIN TRY
             FROM dbo.shipping_method sm
             WHERE sm.method_name = e.service_method
                 AND sm.carrier_id = @Carrier_id
+                AND sm.integrated_carrier_id = c.carrier_id
         );
 
     SET @ShippingMethodsAdded = @@ROWCOUNT;

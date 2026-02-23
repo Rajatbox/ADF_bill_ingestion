@@ -17,10 +17,10 @@ ADF Pipeline Variables Required:
     - ErrorMessage: NVARCHAR (if error)
 
 Purpose: Two-step transactional data insertion process with file tracking:
-         1. Aggregate and insert invoice-level summary data from delta_usps_easypost_bill 
+         1. Aggregate and insert invoice-level summary data from delta_easypost_bill 
             into carrier_bill with file_id - generates carrier_bill_id
-         2. Insert line-level billing data from delta_usps_easypost_bill (ELT staging) 
-            into billing.usps_easy_post_bill (Carrier Bill line items)
+         2. Insert line-level billing data from delta_easypost_bill (ELT staging) 
+            into billing.easypost_bill (Carrier Bill line items)
 
 Invoice Number Generation: 
          invoice_number = carrier_account_id + '-' + yyyy-MM-dd from created_at
@@ -30,9 +30,9 @@ Invoice Number Generation:
          
          Note: Same formula used in both INSERTs to ensure deterministic joins
 
-Source:   billing.delta_usps_easypost_bill
+Source:   billing.delta_easypost_bill
 Targets:  billing.carrier_bill (invoice summaries with file_id)
-          billing.usps_easy_post_bill (line items)
+          billing.easypost_bill (line items)
 
 File Tracking: file_id stored in carrier_bill enables:
                - File-based idempotency checks (same file won't create duplicates)
@@ -92,7 +92,7 @@ BEGIN TRY
         MAX(d.carrier_account_id) AS account_number,
         @File_id AS file_id
     FROM
-        billing.delta_usps_easypost_bill AS d
+        billing.delta_easypost_bill AS d
     WHERE
         -- Validation: Fail fast on bad data
         d.created_at IS NOT NULL 
@@ -114,8 +114,8 @@ BEGIN TRY
     ================================================================================
     Step 2: Insert Line-Level Billing Data
     ================================================================================
-    Inserts individual shipment records from delta_usps_easypost_bill into 
-    billing.usps_easy_post_bill.
+    Inserts individual shipment records from delta_easypost_bill into 
+    billing.easypost_bill.
     
     Join Strategy:
     - Compute same invoice_number formula to validate invoice exists in carrier_bill
@@ -130,7 +130,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO billing.usps_easy_post_bill (
+    INSERT INTO billing.easypost_bill (
         tracking_code,
         invoice_number,
         carrier_bill_id,
@@ -147,7 +147,8 @@ BEGIN TRY
         insurance_fee,
         carbon_offset_fee,
         bill_date,
-        service
+        service,
+        integrated_carrier  -- NEW: Actual carrier name
     )
     SELECT
         -- Shipment identifiers
@@ -187,9 +188,12 @@ BEGIN TRY
         CAST(d.created_at AS DATE) AS bill_date,
         
         -- Service information
-        d.service
+        d.service,
+        
+        -- Integrated carrier (actual fulfillment carrier - USPS, FedEx, UPS, etc.)
+        NULLIF(TRIM(d.carrier), '') AS integrated_carrier  -- NEW
     FROM
-        billing.delta_usps_easypost_bill AS d
+        billing.delta_easypost_bill AS d
     INNER JOIN billing.carrier_bill cb
         ON cb.bill_number = CONCAT(d.carrier_account_id, '-', FORMAT(CAST(d.created_at AS DATE), 'yyyy-MM-dd'))
         AND cb.bill_date = CAST(d.created_at AS DATE)
@@ -203,7 +207,7 @@ BEGIN TRY
         -- Idempotency (Design Constraint #9): Check by carrier_bill_id only
         AND NOT EXISTS (
             SELECT 1
-            FROM billing.usps_easy_post_bill t
+            FROM billing.easypost_bill t
             WHERE t.carrier_bill_id = cb.carrier_bill_id
         );
 

@@ -6,7 +6,7 @@ Purpose: Verify that the total amount in carrier_bill matches the sum of all
          charges in shipment_charges for USPS EasyPost carrier.
 
 Test Logic:
-1. Calculate expected total from delta_usps_easypost_bill (source of truth)
+1. Calculate expected total from delta_easypost_bill (source of truth)
    - Sum of: rate + label_fee + postage_fee + carbon_offset_fee + insurance_fee
    
 2. Calculate actual total from shipment_charges (unified layer)
@@ -43,7 +43,7 @@ WITH file_total AS (
             CAST(ISNULL(d.carbon_offset_fee, '0') AS decimal(18,2)) + 
             CAST(ISNULL(d.insurance_fee, '0') AS decimal(18,2))
         ) AS expected_total
-    FROM billing.delta_usps_easypost_bill d
+    FROM billing.delta_easypost_bill d
 ),
 charges_total AS (
     SELECT 
@@ -86,10 +86,10 @@ Additional Validation Queries (Optional)
 -- Check for missing tracking numbers in unified layer
 SELECT 
     'Missing Tracking Numbers' AS [Check],
-    COUNT(DISTINCT u.tracking_code) AS [Count in usps_easy_post_bill],
+    COUNT(DISTINCT u.tracking_code) AS [Count in easypost_bill],
     COUNT(DISTINCT sa.tracking_number) AS [Count in shipment_attributes],
     COUNT(DISTINCT u.tracking_code) - COUNT(DISTINCT sa.tracking_number) AS [Missing Count]
-FROM billing.usps_easy_post_bill u
+FROM billing.easypost_bill u
 LEFT JOIN billing.shipment_attributes sa 
     ON sa.tracking_number = u.tracking_code
     AND sa.carrier_id = @Carrier_id;
