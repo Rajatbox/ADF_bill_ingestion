@@ -206,7 +206,6 @@ BEGIN TRY
     WHERE
         cb.file_id = @File_id  -- FILE-BASED FILTERING
         AND p.carrier_bill_id IS NOT NULL
-        AND p.tracking_number IS NOT NULL
         AND NULLIF(TRIM(p.tracking_number), '') IS NOT NULL
         AND NULLIF(TRIM(v.charge_name), '') IS NOT NULL    -- skip empty fee descriptions
         AND v.charge_amount IS NOT NULL
