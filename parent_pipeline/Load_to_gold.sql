@@ -85,7 +85,7 @@ BEGIN TRY
         dbo.shipping_method AS sm
         ON sm.method_name = vss.shipping_method
         AND sm.carrier_id = vss.carrier_id
-        AND sm.integrated_carrier_id = vss.integrated_carrier_id
+        AND ISNULL(sm.integrated_carrier_id, 0) = ISNULL(vss.integrated_carrier_id, 0)
     WHERE 
         NULLIF(vss.tracking_number, '') IS NOT NULL;
 
@@ -129,8 +129,8 @@ BEGIN TRY
         sw.external_id AS shipment_external_id,
         o.[3pl_customer_id] AS customer_id,
         sc.carrier_id,
-        spw.shipping_method_id,
-        ctc.category AS category,  -- Category name from dbo.charge_type_category
+        sm.shipping_method_id,
+        ctc.category AS category,
         ct.charge_name AS cost_item,
         sc.amount,
         sc.charge_type_id,
@@ -163,6 +163,11 @@ BEGIN TRY
         billing.shipment_attributes AS sa
         ON sa.tracking_number = sc.tracking_number
         AND sa.carrier_id = sc.carrier_id
+    LEFT JOIN
+        dbo.shipping_method AS sm
+        ON sm.method_name = sa.shipping_method
+        AND sm.carrier_id = sa.carrier_id
+        AND ISNULL(sm.integrated_carrier_id, 0) = ISNULL(sa.integrated_carrier_id, 0)
     LEFT JOIN 
         dbo.shipment_package AS spw
         ON spw.tracking_number = sc.tracking_number
@@ -179,8 +184,8 @@ BEGIN TRY
         NOT EXISTS (
             SELECT 1
             FROM dbo.carrier_cost_ledger AS ccl
-            WHERE ccl.carrier_bill_id = sc.carrier_bill_id
-                AND ccl.tracking_number = sc.tracking_number
+            WHERE ccl.shipment_attribute_id = sc.shipment_attribute_id
+                AND ccl.carrier_bill_id = sc.carrier_bill_id
                 AND ccl.charge_type_id = sc.charge_type_id
         );
 

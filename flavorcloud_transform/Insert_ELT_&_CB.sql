@@ -146,7 +146,7 @@ BEGIN TRY
         origin_location,
         destination_country,
         ship_to_zip,
-        carrier_name,
+        integrated_carrier,
         total_weight,
         weight_unit,
         length,
@@ -179,7 +179,7 @@ BEGIN TRY
         d.[Origin Location] AS origin_location,
         d.[Destination Country] AS destination_country,
         d.[Ship To Address Zip] AS ship_to_zip,
-        d.[Carrier] AS carrier_name,
+        NULLIF(TRIM(d.[Carrier]), '') AS integrated_carrier,  -- Actual carrier name
 
         CAST(d.[Total Weight] AS DECIMAL(18,6)) AS total_weight,
         d.[Weight Unit] AS weight_unit,

@@ -95,7 +95,8 @@ BEGIN TRY
         billed_weight_oz,
         billed_length_in,
         billed_width_in,
-        billed_height_in
+        billed_height_in,
+        integrated_carrier_id
     )
     SELECT
         @Carrier_id AS carrier_id,
@@ -128,11 +129,20 @@ BEGIN TRY
             WHEN UPPER(f.dimension_unit) = 'CM' THEN f.height / 2.54
             WHEN UPPER(f.dimension_unit) = 'MM' THEN f.height / 25.4
             ELSE f.height
-        END AS billed_height_in
+        END AS billed_height_in,
+
+        -- NEW: Get integrated_carrier_id from shipping_method
+        sm.integrated_carrier_id
 
     FROM
         billing.flavorcloud_bill f
-    JOIN billing.carrier_bill cb ON cb.carrier_bill_id = f.carrier_bill_id
+        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = f.carrier_bill_id
+        LEFT JOIN dbo.carrier c 
+            ON LOWER(c.carrier_name) = LOWER(f.integrated_carrier)
+        LEFT JOIN dbo.shipping_method sm 
+            ON sm.carrier_id = @Carrier_id 
+            AND sm.method_name = f.service_level
+            AND sm.integrated_carrier_id = c.carrier_id
     WHERE
         cb.file_id = @File_id  -- FILE-BASED FILTERING
         AND f.tracking_number IS NOT NULL

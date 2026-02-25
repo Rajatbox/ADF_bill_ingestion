@@ -991,7 +991,7 @@ CREATE TABLE billing.flavorcloud_bill (
     origin_location NVARCHAR(255) NULL,
     destination_country NVARCHAR(10) NULL,
     ship_to_zip NVARCHAR(50) NULL,
-    carrier_name NVARCHAR(100) NULL,
+    integrated_carrier NVARCHAR(100) NULL,  -- Actual carrier name (DHL, FedEx, UPS, etc.)
     total_weight DECIMAL(18,6) NULL,
     weight_unit NVARCHAR(10) NULL,
     length DECIMAL(18,2) NULL,

@@ -1,16 +1,12 @@
 /*
 ================================================================================
-Migration Script: Aggregator Integration
+Migration Script: FlavorCloud Aggregator Integration
 ================================================================================
-Purpose: Add support for hierarchical carrier model (aggregator → actual carrier)
+Purpose: Standardize FlavorCloud carrier column naming to match other aggregators
 
 Changes:
-  1. Add is_aggregator to dbo.carrier
-  2. Add integrated_carrier to billing.usps_easy_post_bill
-  3. Add integrated_carrier to billing.eliteworks_bill
-  4. Add integrated_carrier_id to dbo.shipping_method
-  5. Rename delta_usps_easypost_bill → delta_easypost_bill
-  6. Rename usps_easy_post_bill → easypost_bill
+  1. Rename carrier_name → integrated_carrier in billing.flavorcloud_bill
+  2. Add integrated_carrier_id to billing.shipment_attributes
 
 ================================================================================
 */
@@ -18,19 +14,14 @@ Changes:
 SET NOCOUNT ON;
 GO
 
+-- Step 1: Rename carrier_name to integrated_carrier in FlavorCloud bill table
+EXEC sp_rename 'billing.flavorcloud_bill.carrier_name', 'integrated_carrier', 'COLUMN';
+GO
 
-
-
--- Step 4: Add integrated_carrier_id to billing.shipment_attributes
+-- Step 2: Add integrated_carrier_id to shipment_attributes
 ALTER TABLE billing.shipment_attributes
 ADD integrated_carrier_id INT NULL;
 GO
 
--- Step 6: Rename delta_usps_easypost_bill to delta_easypost_bill
-EXEC sp_rename 'billing.delta_usps_easypost_bill', 'delta_easypost_bill';
+PRINT '✓ Migration completed successfully!';
 GO
-
--- Step 7: Rename usps_easy_post_bill to easypost_bill
-EXEC sp_rename 'billing.usps_easy_post_bill', 'easypost_bill';
-GO
-
