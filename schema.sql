@@ -678,6 +678,62 @@ CREATE TABLE billing.delta_flavorcloud_bill (
 );
 
 
+-- PASSPORT DELTA TABLE
+
+CREATE TABLE billing.delta_passport_bill (
+    [INVOICE NUMBER]           VARCHAR(255) NULL,
+    [INVOICE DATE]             VARCHAR(50)  NULL,
+    [SHIP DATE]                VARCHAR(50)  NULL,
+    [COMPANY]                  VARCHAR(255) NULL,
+    [CLIENT CODE]              VARCHAR(255) NULL,
+    [ORDER ID]                 VARCHAR(255) NULL,
+    [SERVICE LEVEL]            VARCHAR(255) NULL,
+    [SHIPPER NAME]             VARCHAR(255) NULL,
+    [SHIPPER COMPANY]          VARCHAR(255) NULL,
+    [SHIPPER STREET]           VARCHAR(500) NULL,
+    [SHIPPER CITY]             VARCHAR(255) NULL,
+    [SHIPPER STATE]            VARCHAR(50)  NULL,
+    [SHIPPER ZIP]              VARCHAR(50)  NULL,
+    [SHIPPER COUNTRY]          VARCHAR(100) NULL,
+    [DEST STREET]              VARCHAR(500) NULL,
+    [DEST CITY]                VARCHAR(255) NULL,
+    [DEST STATE]               VARCHAR(50)  NULL,
+    [DEST ZIP]                 VARCHAR(50)  NULL,
+    [DEST COUNTRY]             VARCHAR(100) NULL,
+    [TRACKING ID]              VARCHAR(255) NULL,
+    [ACTUAL WEIGHT (OZ)]       VARCHAR(50)  NULL,
+    [DIMENSIONAL WEIGHT (OZ)]  VARCHAR(50)  NULL,
+    [BILLABLE WEIGHT (OZ)]     VARCHAR(50)  NULL,
+    [LENGTH (IN)]              VARCHAR(50)  NULL,
+    [WIDTH (IN)]               VARCHAR(50)  NULL,
+    [HEIGHT (IN)]              VARCHAR(50)  NULL,
+    [CURRENCY]                 VARCHAR(10)  NULL,
+    [RATE]                     VARCHAR(50)  NULL,
+    [FUEL SURCHARGE]           VARCHAR(50)  NULL,
+    [TAX]                      VARCHAR(50)  NULL,
+    [DUTY]                     VARCHAR(50)  NULL,
+    [INSURANCE]                VARCHAR(50)  NULL,
+    [CLEARANCE FEE]            VARCHAR(50)  NULL,
+    [FEE 1 DESCRIPTION]        VARCHAR(255) NULL,
+    [FEE 1 AMOUNT]             VARCHAR(50)  NULL,
+    [FEE 2 DESCRIPTION]        VARCHAR(255) NULL,
+    [FEE 2 AMOUNT]             VARCHAR(50)  NULL,
+    [FEE 3 DESCRIPTION]        VARCHAR(255) NULL,
+    [FEE 3 AMOUNT]             VARCHAR(50)  NULL,
+    [FEE 4 DESCRIPTION]        VARCHAR(255) NULL,
+    [FEE 4 AMOUNT]             VARCHAR(50)  NULL,
+    [FEE 5 DESCRIPTION]        VARCHAR(255) NULL,
+    [FEE 5 AMOUNT]             VARCHAR(50)  NULL,
+    [FEE 6 DESCRIPTION]        VARCHAR(255) NULL,
+    [FEE 6 AMOUNT]             VARCHAR(50)  NULL,
+    [FEE 7 DESCRIPTION]        VARCHAR(255) NULL,
+    [FEE 7 AMOUNT]             VARCHAR(50)  NULL,
+    [FEE 8 DESCRIPTION]        VARCHAR(255) NULL,
+    [FEE 8 AMOUNT]             VARCHAR(50)  NULL,
+    [TOTAL]                    VARCHAR(50)  NULL
+);
+
+
 /*
 ================================================================================
 Normalized Carrier Tables
@@ -1028,6 +1084,82 @@ ON billing.flavorcloud_bill (created_date);
 -- Composite index for tracking number lookups
 CREATE NONCLUSTERED INDEX IX_flavorcloud_bill_tracking_number_invoice
 ON billing.flavorcloud_bill (tracking_number, invoice_number, invoice_date);
+
+
+-- PASSPORT BILL TABLE
+
+CREATE TABLE billing.passport_bill (
+    id                      INT IDENTITY(1,1) NOT NULL,
+    carrier_bill_id         INT              NULL,
+    invoice_number          NVARCHAR(50)     NOT NULL,
+    invoice_date            DATE             NOT NULL,
+    ship_date               DATE             NULL,
+    company                 NVARCHAR(255)    NULL,
+    client_code             NVARCHAR(255)    NULL,
+    order_id                NVARCHAR(255)    NULL,
+    service_level           NVARCHAR(255)    NULL,
+    shipper_name            NVARCHAR(255)    NULL,
+    shipper_company         NVARCHAR(255)    NULL,
+    shipper_street          NVARCHAR(500)    NULL,
+    shipper_city            NVARCHAR(255)    NULL,
+    shipper_state           NVARCHAR(50)     NULL,
+    shipper_zip             NVARCHAR(50)     NULL,
+    shipper_country         NVARCHAR(100)    NULL,
+    dest_street             NVARCHAR(500)    NULL,
+    dest_city               NVARCHAR(255)    NULL,
+    dest_state              NVARCHAR(50)     NULL,
+    dest_zip                NVARCHAR(50)     NULL,
+    dest_country            NVARCHAR(100)    NULL,
+    tracking_number         NVARCHAR(255)    NOT NULL,
+    actual_weight_oz        DECIMAL(18,6)    NULL,
+    dimensional_weight_oz   DECIMAL(18,6)    NULL,
+    billable_weight_oz      DECIMAL(18,6)    NULL,
+    length_in               DECIMAL(18,2)    NULL,
+    width_in                DECIMAL(18,2)    NULL,
+    height_in               DECIMAL(18,2)    NULL,
+    currency                NVARCHAR(10)     NULL,
+    rate                    DECIMAL(18,2)    NULL,
+    fuel_surcharge          DECIMAL(18,2)    NULL,
+    tax                     DECIMAL(18,2)    NULL,
+    duty                    DECIMAL(18,2)    NULL,
+    insurance               DECIMAL(18,2)    NULL,
+    clearance_fee           DECIMAL(18,2)    NULL,
+    fee_1_description       NVARCHAR(255)    NULL,
+    fee_1_amount            DECIMAL(18,2)    NULL,
+    fee_2_description       NVARCHAR(255)    NULL,
+    fee_2_amount            DECIMAL(18,2)    NULL,
+    fee_3_description       NVARCHAR(255)    NULL,
+    fee_3_amount            DECIMAL(18,2)    NULL,
+    fee_4_description       NVARCHAR(255)    NULL,
+    fee_4_amount            DECIMAL(18,2)    NULL,
+    fee_5_description       NVARCHAR(255)    NULL,
+    fee_5_amount            DECIMAL(18,2)    NULL,
+    fee_6_description       NVARCHAR(255)    NULL,
+    fee_6_amount            DECIMAL(18,2)    NULL,
+    fee_7_description       NVARCHAR(255)    NULL,
+    fee_7_amount            DECIMAL(18,2)    NULL,
+    fee_8_description       NVARCHAR(255)    NULL,
+    fee_8_amount            DECIMAL(18,2)    NULL,
+    total                   DECIMAL(18,2)    NULL,
+    created_date            DATETIME2        DEFAULT SYSDATETIME() NOT NULL,
+
+    CONSTRAINT PK_passport_bill PRIMARY KEY (id),
+    CONSTRAINT FK_passport_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+        REFERENCES billing.carrier_bill(carrier_bill_id)
+);
+
+-- Index for FK lookup performance (join with carrier_bill)
+CREATE NONCLUSTERED INDEX IX_passport_bill_carrier_bill_id
+ON billing.passport_bill (carrier_bill_id);
+
+-- Index for incremental processing
+CREATE NONCLUSTERED INDEX IX_passport_bill_created_date
+ON billing.passport_bill (created_date);
+
+-- Composite index for tracking number lookups
+CREATE NONCLUSTERED INDEX IX_passport_bill_tracking_number
+ON billing.passport_bill (tracking_number, invoice_number, invoice_date);
+
 
 /*
 ================================================================================
