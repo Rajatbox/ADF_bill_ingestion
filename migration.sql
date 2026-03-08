@@ -1,27 +1,37 @@
 /*
 ================================================================================
-Migration Script: FlavorCloud Aggregator Integration
+Migration: Correctional Invoice Support
 ================================================================================
-Purpose: Standardize FlavorCloud carrier column naming to match other aggregators
+Purpose: Allow same invoice to appear in multiple files (original + correctional).
+         Replaces unique constraint to include file_id in business key.
 
-Changes:
-  1. Rename carrier_name → integrated_carrier in billing.flavorcloud_bill
-  2. Add integrated_carrier_id to billing.shipment_attributes
-
-================================================================================
-*/
+Idempotent: DROP uses IF EXISTS pattern where supported; CREATE uses IF NOT EXISTS
+            or can be run once. Re-running may require manual handling.
+================================================================================*/
 
 SET NOCOUNT ON;
 GO
 
--- Step 1: Rename carrier_name to integrated_carrier in FlavorCloud bill table
-EXEC sp_rename 'billing.flavorcloud_bill.carrier_name', 'integrated_carrier', 'COLUMN';
+-- 1. Drop existing unique constraint
+IF EXISTS (
+    SELECT 1 FROM sys.indexes 
+    WHERE name = 'UQ_carrier_bill_number_date_carrier' 
+    AND object_id = OBJECT_ID('billing.carrier_bill')
+)
+BEGIN
+    DROP INDEX UQ_carrier_bill_number_date_carrier ON billing.carrier_bill;
+END
 GO
 
--- Step 2: Add integrated_carrier_id to shipment_attributes
-ALTER TABLE billing.shipment_attributes
-ADD integrated_carrier_id INT NULL;
-GO
-
-PRINT '✓ Migration completed successfully!';
+-- 2. Create new unique index including file_id (for file-based processing)
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes 
+    WHERE name = 'UQ_carrier_bill_number_date_carrier_file' 
+    AND object_id = OBJECT_ID('billing.carrier_bill')
+)
+BEGIN
+    CREATE UNIQUE NONCLUSTERED INDEX UQ_carrier_bill_number_date_carrier_file
+    ON billing.carrier_bill (bill_number, bill_date, carrier_id, file_id)
+    WHERE carrier_id IS NOT NULL AND bill_date IS NOT NULL AND file_id IS NOT NULL;
+END
 GO

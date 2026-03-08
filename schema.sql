@@ -1192,10 +1192,10 @@ CREATE TABLE billing.carrier_bill ( -- rename to carrier_bill
 		REFERENCES billing.file_ingestion_tracker(file_id)
 );
 
--- Unique constraint: Prevent duplicate invoices per carrier
-CREATE UNIQUE NONCLUSTERED INDEX UQ_carrier_bill_number_date_carrier
-ON billing.carrier_bill (bill_number, bill_date, carrier_id)
-WHERE carrier_id IS NOT NULL AND bill_date IS NOT NULL;
+-- Unique constraint: Prevent duplicate invoices per carrier per file
+CREATE UNIQUE NONCLUSTERED INDEX UQ_carrier_bill_number_date_carrier_file
+ON billing.carrier_bill (bill_number, bill_date, carrier_id, file_id)
+WHERE carrier_id IS NOT NULL AND bill_date IS NOT NULL AND file_id IS NOT NULL;
 
 -- Index for carrier-based queries
 CREATE NONCLUSTERED INDEX IX_carrier_bill_carrier_id
