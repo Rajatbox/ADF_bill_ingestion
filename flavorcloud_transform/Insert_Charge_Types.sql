@@ -18,16 +18,11 @@ Purpose: ONE-TIME seed of FlavorCloud charge types into dbo.charge_types.
          This should be run once during initial setup before the main pipeline.
          After first successful run, this script will no-op (NOT EXISTS prevents duplicates).
 
-Charge Types (6 total):
-- Shipping Charges (freight=1) - Carrier shipping cost
-- Commissions (freight=0) - FlavorCloud commission
-- Duties (freight=0) - Import duties
-- Taxes (freight=0) - Taxes on shipment
-- Fees (freight=0) - Miscellaneous fees
-- Insurance (freight=0) - Shipment insurance
-
-Note: LandedCost is excluded - it's a computed subtotal (Duties + Taxes + Fees)
-      and storing it would double-count those charges.
+Charge Types (4 total - named to match CSV column headers):
+- Shipping Charges (USD) (freight=1) - Carrier shipping cost
+- Commissions (USD) (freight=0) - FlavorCloud commission
+- LandedCost (Duty + Taxes + Fees) (USD) (freight=0) - Combined duties, taxes, fees
+- Insurance (USD) (freight=0) - Shipment insurance
 
 Charge Category Mapping (Design Constraint #11):
 - All charges → charge_category_id = 11 (Other)
@@ -47,12 +42,13 @@ BEGIN TRY
 
     /*
     ================================================================================
-    Insert Charge Types (FlavorCloud - 6 Charge Types)
+    Insert Charge Types (FlavorCloud - 4 Charge Types)
     ================================================================================
-    Seeds 6 charge types for FlavorCloud carrier.
+    Seeds 4 charge types for FlavorCloud carrier. Names match CSV column headers.
     
-    Shipping Charges is marked as freight=1 (the actual carrier shipping cost).
+    Shipping Charges (USD) is marked as freight=1 (the actual carrier shipping cost).
     All other charges are freight=0 (ancillary charges).
+    LandedCost replaces individual Duties/Taxes/Fees to avoid granular split.
     
     After first run, this will no-op due to NOT EXISTS check.
     ================================================================================
@@ -67,12 +63,10 @@ BEGIN TRY
     SELECT charge_data.carrier_id, charge_data.charge_name, charge_data.freight, charge_data.charge_category_id
     FROM (
         VALUES 
-            (@Carrier_id, 'Shipping Charges', 1, 11),   -- Carrier shipping cost (freight)
-            (@Carrier_id, 'Commissions',      0, 11),   -- FlavorCloud commission
-            (@Carrier_id, 'Duties',           0, 11),   -- Import duties
-            (@Carrier_id, 'Taxes',            0, 11),   -- Taxes
-            (@Carrier_id, 'Fees',             0, 11),   -- Miscellaneous fees
-            (@Carrier_id, 'Insurance',        0, 11)    -- Shipment insurance
+            (@Carrier_id, 'Shipping Charges (USD)',                    1, 11),
+            (@Carrier_id, 'Commissions (USD)',                         0, 11),
+            (@Carrier_id, 'LandedCost (Duty + Taxes + Fees) (USD)',   0, 11),
+            (@Carrier_id, 'Insurance (USD)',                           0, 11)
     ) AS charge_data(carrier_id, charge_name, freight, charge_category_id)
     WHERE NOT EXISTS (
         SELECT 1

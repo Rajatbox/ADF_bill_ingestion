@@ -8,9 +8,9 @@ Purpose: Validates that the charge amounts in shipment_charges table match
 Test 1: File Total vs Charges Total
 Expected Result: Difference < $0.01 (accounting for rounding)
 
-Note: FlavorCloud has 6 charge types per shipment. Zero-amount charges are excluded.
+Note: FlavorCloud has 4 charge types per shipment. Zero-amount charges are excluded.
       SUM(shipment_charges.amount) should equal SUM(Shipment Total Charges) from CSV
-      because Shipment Total = Commissions + Duties + Taxes + Fees + Insurance + Shipping Charges.
+      because Shipment Total = Commissions + LandedCost + Insurance + Shipping Charges.
 
 Usage: Run after Insert_Unified_tables.sql completes successfully.
        Replace @Carrier_id with actual FlavorCloud carrier_id value.
@@ -70,8 +70,8 @@ FROM file_total f, charges_total c;
 Validation Query 2: Charge Breakdown by Type
 ================================================================================
 Shows distribution of charges by type.
-Expected: Up to 6 charge types (Shipping Charges, Commissions, Duties, Taxes, Fees, Insurance)
-Zero-amount charges are excluded so not all 6 may appear.
+Expected: Up to 4 charge types matching CSV column names.
+Zero-amount charges are excluded so not all 4 may appear.
 ================================================================================
 */
 
@@ -133,8 +133,8 @@ SELECT
     'Charge Type Seeding' AS test_name,
     COUNT(*) AS actual_charge_types,
     CASE 
-        WHEN COUNT(*) = 6 THEN 'PASS (Expected 6 charge types)' 
-        ELSE 'FAIL (Expected 6 charge types)' 
+        WHEN COUNT(*) = 4 THEN 'PASS (Expected 4 charge types)' 
+        ELSE 'FAIL (Expected 4 charge types)' 
     END AS result
 FROM dbo.charge_types
 WHERE carrier_id = @Carrier_id;
@@ -160,16 +160,16 @@ Test 1: File Total vs Charges Total
     are $0, the sum should still match.
 
 Test 2: Charge Breakdown
-  - Expected: Up to 6 charge types
-  - Shipping Charges: freight=1, charge_category_id=11
-  - Commissions, Duties, Taxes, Fees, Insurance: freight=0, charge_category_id=11
+  - Expected: Up to 4 charge types (named to match CSV column headers)
+  - Shipping Charges (USD): freight=1, charge_category_id=11
+  - Commissions (USD), LandedCost (Duty + Taxes + Fees) (USD), Insurance (USD): freight=0, charge_category_id=11
 
 Test 3: Shipment Count
   - Expected: PASS (equal counts)
   - Validates: All shipments from normalized table reached unified table
 
 Test 4: Charge Type Seeding
-  - Expected: PASS (exactly 6 charge types)
+  - Expected: PASS (exactly 4 charge types)
   - Validates: Insert_Charge_Types.sql seeded correctly
 
 If any test fails:

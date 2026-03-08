@@ -35,18 +35,15 @@ View:     billing.vw_shipment_summary (calculated billed_shipping_cost)
 File-Based Filtering: Uses @File_id to process only the current file's data:
          - Filters flavorcloud_bill via carrier_bill JOIN on file_id
 
-Charge Structure: FlavorCloud stores 6 charge columns per shipment (wide format):
-         - Shipping Charges (freight=1) - Carrier shipping cost
-         - Commissions (freight=0) - FlavorCloud commission
-         - Duties (freight=0) - Import duties
-         - Taxes (freight=0) - Taxes
-         - Fees (freight=0) - Miscellaneous fees
-         - Insurance (freight=0) - Shipment insurance
+Charge Structure: FlavorCloud stores 4 charge columns per shipment (wide format):
+         - Shipping Charges (USD) (freight=1) - Carrier shipping cost
+         - Commissions (USD) (freight=0) - FlavorCloud commission
+         - LandedCost (Duty + Taxes + Fees) (USD) (freight=0) - Combined duties, taxes, fees
+         - Insurance (USD) (freight=0) - Shipment insurance
          
          These are unpivoted via CROSS APPLY VALUES into individual rows.
          Zero-amount charges are skipped (amount <> 0 filter).
-         
-         LandedCost is NOT included (it's Duties + Taxes + Fees and would double-count).
+         Charge names match CSV column headers exactly.
          Shipment Total Charges is preserved in flavorcloud_bill for audit.
 
 Idempotency: - Part 1: NOT EXISTS check + UNIQUE constraint prevents duplicate attributes
@@ -160,16 +157,14 @@ BEGIN TRY
     ================================================================================
     PART 2: INSERT Shipment Charges (Unpivot Wide → Narrow)
     ================================================================================
-    Unpivots 6 charge columns from flavorcloud_bill into individual rows in
+    Unpivots 4 charge columns from flavorcloud_bill into individual rows in
     shipment_charges using CROSS APPLY VALUES.
     
-    Charge Mapping:
-    - 'Shipping Charges' → f.shipping_charges (freight=1)
-    - 'Commissions'      → f.commissions      (freight=0)
-    - 'Duties'           → f.duties           (freight=0)
-    - 'Taxes'            → f.taxes            (freight=0)
-    - 'Fees'             → f.fees             (freight=0)
-    - 'Insurance'        → f.insurance        (freight=0)
+    Charge Mapping (names match CSV column headers):
+    - 'Shipping Charges (USD)'                    → f.shipping_charges  (freight=1)
+    - 'Commissions (USD)'                         → f.commissions       (freight=0)
+    - 'LandedCost (Duty + Taxes + Fees) (USD)'   → f.landed_cost       (freight=0)
+    - 'Insurance (USD)'                           → f.insurance         (freight=0)
     
     Zero/NULL amounts are excluded (no $0 charge records).
     
@@ -201,12 +196,10 @@ BEGIN TRY
         billing.flavorcloud_bill f
     CROSS APPLY (
         VALUES
-            ('Shipping Charges', f.shipping_charges),
-            ('Commissions',      f.commissions),
-            ('Duties',           f.duties),
-            ('Taxes',            f.taxes),
-            ('Fees',             f.fees),
-            ('Insurance',        f.insurance)
+            ('Shipping Charges (USD)',                    f.shipping_charges),
+            ('Commissions (USD)',                         f.commissions),
+            ('LandedCost (Duty + Taxes + Fees) (USD)',   f.landed_cost),
+            ('Insurance (USD)',                           f.insurance)
     ) v(charge_name, charge_amount)
     INNER JOIN dbo.charge_types ct 
         ON ct.charge_name = v.charge_name
@@ -279,7 +272,7 @@ Design Constraints Applied
 ✅ #6  - Cost NOT stored in shipment_attributes (calculated via view)
 ✅ #7  - Weight converted LB → OZ (× 16), dimensions handled IN/CM/MM → IN
 ✅ #8  - Returns Status, AttributesInserted, ChargesInserted
-✅ #10 - Wide format: CROSS APPLY VALUES unpivots 6 charge columns → narrow rows
+✅ #10 - Wide format: CROSS APPLY VALUES unpivots 4 charge columns → narrow rows
 ✅ #11 - Charge categories: All = Other (11), no invented categories
 ================================================================================
 
@@ -287,7 +280,7 @@ Notes:
 - FlavorCloud weight is in LB → converted to OZ (× 16) per Design Constraint #7
 - FlavorCloud dimensions are in IN → no conversion needed (but CM/MM handled for safety)
 - Zero-amount charges are excluded (no $0.00 rows in shipment_charges)
-- LandedCost excluded from charges (it's Duties + Taxes + Fees, would double-count)
+- LandedCost replaces individual Duties/Taxes/Fees (single combined charge)
 - SUM(shipment_charges.amount) should equal SUM(shipment_total_charges) from flavorcloud_bill
 ================================================================================
 */
