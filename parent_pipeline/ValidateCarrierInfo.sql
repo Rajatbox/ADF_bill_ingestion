@@ -14,7 +14,7 @@ Returns: carrier_id, file_id, validated_carrier_name
 SET NOCOUNT ON;
 
 -- 1. Accept params from ADF
-DECLARE @RawJson NVARCHAR(MAX) = '@{string(activity('LookupAccountInFile').output.firstRow)}';
+DECLARE @RawJson NVARCHAR(MAX) = '@{replace(string(activity('LookupAccountInFile').output.firstRow), '''', ' ')}';
 DECLARE @InputCarrier NVARCHAR(100) = LOWER('@{variables('v_FileMetadata')[1]}');
 DECLARE @ExpectedAccount NVARCHAR(100) = '@{variables('v_FileMetadata')[2]}';
 DECLARE @FileName NVARCHAR(255) = '@{variables('v_FileMetadata')[3]}';
@@ -26,7 +26,7 @@ DECLARE @ActualAccountInFile NVARCHAR(100) = CASE
     WHEN @InputCarrier = 'ups'   THEN JSON_VALUE(@RawJson, '$.Prop_2')
     WHEN @InputCarrier = 'usps - easy post' THEN JSON_VALUE(@RawJson, '$.Prop_32')
     WHEN @InputCarrier = 'eliteworks' THEN JSON_VALUE(@RawJson, '$.Prop_2')  -- Column 3: USER
-    WHEN @InputCarrier = 'flavorcloud' THEN JSON_VALUE(@RawJson, '$.Prop_6')  -- Column 7: Origin Location
+    WHEN @InputCarrier = 'flavor cloud' THEN JSON_VALUE(@RawJson, '$.Prop_6')  -- Column 7: Origin Location
     WHEN @InputCarrier = 'passport' THEN JSON_VALUE(@RawJson, '$.Prop_7')  -- Column 8: Shipper Company
     ELSE 'UNKNOWN_CARRIER'
 END;
@@ -74,5 +74,6 @@ SELECT
     END AS validated_carrier_name
 FROM billing.file_ingestion_tracker
 WHERE file_name = @FileName AND carrier_id = @Carrier_id;
+
 
 
