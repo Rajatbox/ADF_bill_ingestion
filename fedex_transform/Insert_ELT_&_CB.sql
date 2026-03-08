@@ -361,6 +361,7 @@ INNER JOIN billing.carrier_bill cb
     ON cb.bill_number = NULLIF(TRIM(d.[Invoice Number]), '')
     AND cb.bill_date = NULLIF(TRIM(d.[Invoice Date]), '')
     AND cb.carrier_id = @Carrier_id
+    AND cb.file_id = @File_id
 WHERE NULLIF(TRIM(d.[Invoice Number]), '') IS NOT NULL
   AND NULLIF(TRIM(d.[Invoice Date]), '') IS NOT NULL
   AND NOT EXISTS (
