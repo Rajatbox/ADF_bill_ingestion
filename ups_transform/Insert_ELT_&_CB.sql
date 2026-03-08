@@ -174,6 +174,8 @@ BEGIN TRY
         AND cb.carrier_id = @carrier_id
     WHERE
         NULLIF(TRIM(d.[Invoice Date]), '') IS NOT NULL
+        AND NULLIF(TRIM(d.[Charge Description]), '') IS NOT NULL
+        AND NULLIF(TRIM(d.[Charge Classification Code]), '') IS NOT NULL
         AND NOT EXISTS (
             SELECT 1
             FROM billing.ups_bill AS ub

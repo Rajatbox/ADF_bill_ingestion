@@ -90,6 +90,12 @@ BEGIN TRY
     - charge_category_code = 'ADJ': charge_category_id = 16 (FK to dbo.charge_type_category)
     - All others: charge_category_id = 11 (FK to dbo.charge_type_category)
     
+    Charge Naming:
+    - SHP: charge_description as-is (e.g., "UPS Ground")
+    - All others: charge_description + ' - ' + charge_category_code
+      (e.g., "Fuel Surcharge - ACC") to disambiguate same descriptions
+      across different categories
+    
     Freight flag determined by:
     - charge_category_code = 'SHP' -> freight = 1
     - All others -> freight = 0
@@ -108,7 +114,10 @@ BEGIN TRY
     )
     SELECT DISTINCT
         @carrier_id AS carrier_id,
-        ub.charge_description AS charge_name,
+        CASE
+            WHEN ub.charge_category_code = 'SHP' THEN ub.charge_description
+            ELSE ub.charge_description + ' - ' + ub.charge_category_code
+        END AS charge_name,
         CASE 
             WHEN ub.charge_category_code = 'SHP' THEN 1
             ELSE 0
@@ -129,7 +138,10 @@ BEGIN TRY
             SELECT 1
             FROM dbo.charge_types AS ct
             WHERE ct.carrier_id = @carrier_id
-                AND ct.charge_name = ub.charge_description
+                AND ct.charge_name = CASE
+                    WHEN ub.charge_category_code = 'SHP' THEN ub.charge_description
+                    ELSE ub.charge_description + ' - ' + ub.charge_category_code
+                END
         );
 
     SET @ChargeTypesInserted = @@ROWCOUNT;

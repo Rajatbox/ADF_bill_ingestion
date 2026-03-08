@@ -206,7 +206,10 @@ BEGIN TRY
         AND cb.bill_date = ub.invoice_date
     INNER JOIN dbo.charge_types AS ct
         ON ct.carrier_id = @carrier_id
-        AND ct.charge_name = ub.charge_description
+        AND ct.charge_name = CASE
+            WHEN ub.charge_category_code = 'SHP' THEN ub.charge_description
+            ELSE ub.charge_description + ' - ' + ub.charge_category_code
+        END
     WHERE
         cb.file_id = @File_id  -- File-based filtering
         AND ub.net_amount <> 0  -- Exclude zero charges
