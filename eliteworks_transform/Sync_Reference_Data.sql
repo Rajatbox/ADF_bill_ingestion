@@ -12,6 +12,7 @@ ADF Pipeline Variables Required:
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
+    - CarriersAdded: INT - Number of new integrated carriers auto-discovered
     - ShippingMethodsAdded: INT - Number of new shipping methods discovered
     - ErrorNumber: INT (if error)
     - ErrorMessage: NVARCHAR (if error)
@@ -19,11 +20,12 @@ ADF Pipeline Variables Required:
 Purpose: Automatically populate and maintain reference/lookup tables by 
          discovering new values from processed Eliteworks billing data.
          
-         Discovers and syncs shipping methods from service column in eliteworks_bill.
+         Block 0: Auto-discover integrated carriers from billing data into dbo.carrier
+         Block 1: Sync shipping methods from service column in eliteworks_bill.
 
 Source:  billing.eliteworks_bill + carrier_bill JOIN (file_id filtered)
          
-Targets: dbo.shipping_method
+Targets: dbo.carrier (integrated carriers), dbo.shipping_method
 
 File-Based Filtering: Uses @File_id to process only the current file's data:
          - Joins carrier_bill to filter by file_id
@@ -43,9 +45,41 @@ No Transaction: Each INSERT is independently idempotent via unique constraints
 
 SET NOCOUNT ON;
 
-DECLARE @ShippingMethodsAdded INT;
+DECLARE @CarriersAdded INT, @ShippingMethodsAdded INT;
 
 BEGIN TRY
+
+    /*
+    ================================================================================
+    Block 0: Auto-Discover Integrated Carriers
+    ================================================================================
+    Aggregator billing data may reference carrier names (e.g., "USPS", "OnTrac")
+    that don't yet exist in dbo.carrier. Insert them before the shipping method
+    sync so the LEFT JOIN to dbo.carrier resolves correctly.
+
+    Inserted with is_aggregator = 0 (these are real fulfillment carriers).
+    Case-insensitive NOT EXISTS to avoid duplicates like "fedex" vs "FedEx".
+    ================================================================================
+    */
+
+    INSERT INTO dbo.carrier (carrier_name, is_active, is_aggregator)
+    SELECT DISTINCT
+        e.integrated_carrier AS carrier_name,
+        1 AS is_active,
+        0 AS is_aggregator
+    FROM
+        billing.eliteworks_bill e
+    JOIN billing.carrier_bill cb ON cb.carrier_bill_id = e.carrier_bill_id
+    WHERE
+        cb.file_id = @File_id
+        AND e.integrated_carrier IS NOT NULL
+        AND NULLIF(TRIM(e.integrated_carrier), '') IS NOT NULL
+        AND NOT EXISTS (
+            SELECT 1 FROM dbo.carrier c
+            WHERE LOWER(c.carrier_name) = LOWER(e.integrated_carrier)
+        );
+
+    SET @CarriersAdded = @@ROWCOUNT;
 
     /*
     ================================================================================
@@ -106,6 +140,7 @@ BEGIN TRY
     */
     SELECT 
         'SUCCESS' AS Status,
+        @CarriersAdded AS CarriersAdded,
         @ShippingMethodsAdded AS ShippingMethodsAdded;
 
 END TRY

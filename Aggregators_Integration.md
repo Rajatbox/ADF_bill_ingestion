@@ -59,15 +59,17 @@ The Carrier table will store both aggregators and traditional carriers, with a f
 
 **Example Data:**
 
-| Carrier ID | Carrier Name | Carrier Code | Is Active | Is Aggregator |
-|------------|--------------|--------------|-----------|---------------|
-| 1          | FedEx        | FEDEX        | Yes       | No            |
-| 2          | UPS          | UPS          | Yes       | No            |
-| 3          | USPS         | USPS         | Yes       | No            |
-| 4          | DHL          | DHL          | Yes       | No            |
-| 5          | Eliteworks   | ELITEWORKS   | Yes       | **Yes**       |
-| 6          | Passport     | PASSPORT     | Yes       | **Yes**       |
-| 7          | EasyPost     | EASYPOST     | Yes       | **Yes**       |
+| Carrier ID | Carrier Name | Is Active | Is Aggregator |
+|------------|--------------|-----------|---------------|
+| 1          | FedEx        | Yes       | No            |
+| 2          | UPS          | Yes       | No            |
+| 3          | USPS         | Yes       | No            |
+| 4          | DHL          | Yes       | No            |
+| 5          | Eliteworks   | Yes       | **Yes**       |
+| 6          | Passport     | Yes       | **Yes**       |
+| 7          | EasyPost     | Yes       | **Yes**       |
+
+**Auto-Discovery:** Aggregator billing data may reference carrier names not yet in this table (e.g., a new last-mile carrier). Each aggregator's `Sync_Reference_Data.sql` runs a Block 0 INSERT-IF-NOT-EXISTS that discovers unknown `integrated_carrier` values from billing data and inserts them with `is_aggregator = 0`, `is_active = 1` before the shipping method sync executes. This ensures the downstream `integrated_carrier_id` FK resolves correctly without manual seeding.
 
 ---
 

@@ -12,6 +12,7 @@ ADF Pipeline Variables Required:
   
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
+    - CarriersAdded: INT - Number of new integrated carriers auto-discovered
     - ShippingMethodsAdded: INT - Number of new shipping methods discovered
     - ErrorNumber: INT (if error)
     - ErrorMessage: NVARCHAR (if error)
@@ -19,12 +20,13 @@ ADF Pipeline Variables Required:
 Purpose: Automatically populate and maintain reference/lookup tables by 
          discovering new values from processed USPS EasyPost billing data.
          
+         Block 0: Auto-discover integrated carriers from billing data into dbo.carrier
          Block 1: Sync shipping_method (discovered from data)
          Block 2: ONE-TIME SEED of 5 fixed USPS EasyPost charge types (static)
 
 Source:  billing.easypost_bill + carrier_bill JOIN (file_id filtered)
          
-Targets: dbo.shipping_method
+Targets: dbo.carrier (integrated carriers), dbo.shipping_method
          dbo.charge_types (one-time seed of 5 fixed charges)
 
 File-Based Filtering: Uses @File_id to process only the current file's data:
@@ -42,9 +44,41 @@ No Transaction: Each INSERT is independently idempotent via unique constraints
 
 SET NOCOUNT ON;
 
-DECLARE @ShippingMethodsAdded INT;
+DECLARE @CarriersAdded INT, @ShippingMethodsAdded INT;
 
 BEGIN TRY
+
+    /*
+    ================================================================================
+    Block 0: Auto-Discover Integrated Carriers
+    ================================================================================
+    Aggregator billing data may reference carrier names (e.g., "USPS", "FedEx")
+    that don't yet exist in dbo.carrier. Insert them before the shipping method
+    sync so the LEFT JOIN to dbo.carrier resolves correctly.
+
+    Inserted with is_aggregator = 0 (these are real fulfillment carriers).
+    Case-insensitive NOT EXISTS to avoid duplicates like "fedex" vs "FedEx".
+    ================================================================================
+    */
+
+    INSERT INTO dbo.carrier (carrier_name, is_active, is_aggregator)
+    SELECT DISTINCT
+        u.integrated_carrier AS carrier_name,
+        1 AS is_active,
+        0 AS is_aggregator
+    FROM
+        billing.easypost_bill u
+    JOIN billing.carrier_bill cb ON cb.carrier_bill_id = u.carrier_bill_id
+    WHERE
+        cb.file_id = @File_id
+        AND u.integrated_carrier IS NOT NULL
+        AND NULLIF(TRIM(u.integrated_carrier), '') IS NOT NULL
+        AND NOT EXISTS (
+            SELECT 1 FROM dbo.carrier c
+            WHERE LOWER(c.carrier_name) = LOWER(u.integrated_carrier)
+        );
+
+    SET @CarriersAdded = @@ROWCOUNT;
 
     /*
     ================================================================================
@@ -141,6 +175,7 @@ BEGIN TRY
     */
     SELECT 
         'SUCCESS' AS Status,
+        @CarriersAdded AS CarriersAdded,
         @ShippingMethodsAdded AS ShippingMethodsAdded;
 
 END TRY
