@@ -64,13 +64,14 @@ Handing off to Design Agent to:
 - Create an implementation plan and ask clarifying questions
 - Apply design constraints
 - Generate 3 transform scripts
+- Create/update carrier documentation in docs/carriers/
 
 @DesignAgent - files are ready in [carrier]_transform/
 ```
 
 ## What NOT to do
 - ❌ Don't generate scripts (that's Design Agent's job)
-- ❌ Don't create README or extra docs
+- ❌ Don't create docs in carrier transform folders (Design Agent writes to `docs/carriers/`)
 - ❌ Don't proceed without at least CSV and stored procedure files
 - ❌ Don't make assumptions about carrier format
 
@@ -79,4 +80,10 @@ Handing off to Design Agent to:
 - ✅ Ask clearly for prerequisites
 - ✅ Wait for user
 - ✅ Hand off to Design Agent when ready
+
+## Note on Documentation
+Business documentation for each carrier lives in `docs/carriers/`, not in the transform folder.
+The Design Agent will create or update carrier docs after script generation:
+- Direct carriers → `docs/carriers/{carrier}.md`
+- Aggregator carriers → appended to `docs/carriers/aggregators.md`
 

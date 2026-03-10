@@ -8,6 +8,7 @@ Transform script designer and generator
 2. Apply design constraints
 3. Generate 3 transform scripts
 4. Provide validation test
+5. Create/update carrier documentation in `docs/carriers/`
 
 ## Prerequisites (from Setup Agent)
 - ✅ `[carrier]_example_bill.csv` exists and populated
@@ -69,7 +70,7 @@ CREATE TABLE test.delta_[carrier]_bill (
 ```
 
 ### Step 3: Read Design Constraints
-**MUST READ:** `DESIGN_CONSTRAINTS.md`
+**MUST READ:** `.cursor/rules/design-constraints.mdc`
 
 Key rules to apply:
 - Transaction boundaries (where to use BEGIN TRAN)
@@ -216,12 +217,31 @@ SELECT
 FROM file_total, charges_total;
 ```
 
+### Step 6: Create/Update Carrier Documentation
+
+After scripts are generated, create business documentation in `docs/carriers/`:
+
+**Direct carriers** (FedEx, UPS, DHL, UniUni, Passport):
+- Create `docs/carriers/{carrier}.md` with:
+  - CSV format summary (columns, types, special handling)
+  - Charge type mapping (name, freight flag, category)
+  - Unit conversion notes
+  - Business logic highlights and carrier-specific quirks
+
+**Aggregator carriers** (EasyPost, Eliteworks, FlavorCloud):
+- Append a new section to `docs/carriers/aggregators.md` with:
+  - `## {Carrier Name}` heading
+  - CSV format summary
+  - Charge type mapping
+  - Integrated carrier handling
+  - Business logic highlights
+
 ## Checklist Before Delivery
 
 - [ ] Read carrier CSV
 - [ ] Read stored procedure
 - [ ] Read additional_reference.md (if populated)
-- [ ] Read DESIGN_CONSTRAINTS.md
+- [ ] Read `.cursor/rules/design-constraints.mdc`
 - [ ] Presented implementation plan to user
 - [ ] Asked clarifying questions
 - [ ] Received user approval to proceed
@@ -231,10 +251,11 @@ FROM file_total, charges_total;
 - [ ] Generated Insert_Unified_tables.sql (with unit conversions)
 - [ ] Provided 1 validation test
 - [ ] Applied all design constraints
+- [ ] Created/updated carrier documentation in `docs/carriers/`
 
 ## What NOT to do
 - ❌ Don't modify parent_pipeline files
-- ❌ Don't create README or extra docs
+- ❌ Don't create docs in carrier transform folders (use `docs/carriers/` instead)
 - ❌ Don't use TRY_CAST (use CAST)
 - ❌ Don't store cost in shipment_attributes
 - ❌ Don't forget unit conversions (OZ, IN)
@@ -247,7 +268,7 @@ FROM file_total, charges_total;
 
 ## What TO do
 - ✅ Read all input files (CSV, stored procedure, additional reference)
-- ✅ Read design constraints
+- ✅ Read design constraints (`.cursor/rules/design-constraints.mdc`)
 - ✅ Create implementation plan and present to user FIRST
 - ✅ Ask clarifying questions before generating scripts
 - ✅ Wait for user approval before proceeding
@@ -255,4 +276,5 @@ FROM file_total, charges_total;
 - ✅ Apply all design rules
 - ✅ Provide exactly 1 test query
 - ✅ Preserve business logic from stored procedure and additional reference
+- ✅ Create/update carrier documentation in `docs/carriers/`
 

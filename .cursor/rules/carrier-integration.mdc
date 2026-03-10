@@ -9,7 +9,7 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 ### 🔧 Setup Agent (Folder & File Collection)
 **Trigger:** User says "integrate [Carrier]" or "add [Carrier]"
 
-**Instructions:** Read and follow `.agents/setup_agent.md`
+**Instructions:** Read and follow `.cursor/agents/setup_agent.md`
 
 **Responsibilities:**
 1. Create `[carrier]_transform/` folder with 6 empty files
@@ -33,10 +33,10 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 ### 🎨 Design Agent (Script Generation)
 **Trigger:** User provides CSV and stored procedure files, or says "generate scripts"
 
-**Instructions:** Read and follow `.agents/design_agent.md`
+**Instructions:** Read and follow `.cursor/agents/design_agent.md`
 
 **MUST READ BEFORE GENERATING:**
-- `DESIGN_CONSTRAINTS.md` (10 rules you MUST apply)
+- `.cursor/rules/design-constraints.mdc` (10 rules you MUST apply)
 - `[carrier]_example_bill.csv` (to understand structure)
 - `reference_stored_procedure.sql` (to preserve business logic)
 - `additional_reference.md` (for extra context, if populated)
@@ -60,7 +60,7 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 ### ❌ NEVER DO THIS
 - Modify `parent_pipeline/Load_to_gold.sql`
 - Modify `parent_pipeline/LookupCarrierInfo.sql`
-- Create README or extra documentation in carrier folder
+- Create documentation files in carrier transform folders (docs go in `docs/carriers/`)
 - Create any new files unless explicitly mentioned in system prompt or user request
 - Generate scripts before receiving CSV and stored procedure
 - Generate scripts before presenting a plan and getting user approval
@@ -73,7 +73,7 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 - Read all input files including `additional_reference.md` (if populated)
 - Create an implementation plan and present to user BEFORE generating scripts
 - Ask clarifying questions and wait for user approval
-- Read `DESIGN_CONSTRAINTS.md` before generating any scripts
+- Read `.cursor/rules/design-constraints.mdc` before generating any scripts
 - Apply all design constraints (including file-based processing)
 - Use `@File_id` parameter for filtering (not `@lastrun`)
 - Use transactions ONLY for `Insert_ELT_&_CB.sql`
@@ -106,14 +106,15 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 ## Reference Files
 
 **Read for context:**
-- `architecture.md` - System architecture and pipeline flow
+- `docs/architecture.md` - System architecture and pipeline flow
 - `schema.sql` - Database schema
 - `fedex_transform/` - Complete working example (reference only, don't copy blindly)
+- `docs/carriers/` - Business documentation per carrier (direct carriers + aggregators)
 
 **Must read for generation:**
-- `DESIGN_CONSTRAINTS.md` - 10 rules to apply
-- `.agents/setup_agent.md` - Setup phase instructions
-- `.agents/design_agent.md` - Design phase instructions
+- `.cursor/rules/design-constraints.mdc` - 10 rules to apply
+- `.cursor/agents/setup_agent.md` - Setup phase instructions
+- `.cursor/agents/design_agent.md` - Design phase instructions
 
 ---
 
@@ -122,15 +123,15 @@ The system transforms carrier-specific billing CSV files into a unified analytic
 ```
 User: "I want to integrate UPS"
   ↓
-You: [Follow .agents/setup_agent.md]
+You: [Follow .cursor/agents/setup_agent.md]
   - Create ups_transform/ with 6 empty files
   - Ask for CSV, stored procedure, and additional reference
   - STOP and wait
 
 User: [Provides CSV, stored procedure, and optional additional reference]
   ↓
-You: [Follow .agents/design_agent.md - PLAN PHASE]
-  - Read DESIGN_CONSTRAINTS.md
+You: [Follow .cursor/agents/design_agent.md - PLAN PHASE]
+  - Read .cursor/rules/design-constraints.mdc
   - Read all user files (CSV, stored proc, additional reference)
   - Present implementation plan
   - Ask clarifying questions
@@ -138,7 +139,7 @@ You: [Follow .agents/design_agent.md - PLAN PHASE]
 
 User: [Approves plan / answers questions]
   ↓
-You: [Follow .agents/design_agent.md - GENERATION PHASE]
+You: [Follow .cursor/agents/design_agent.md - GENERATION PHASE]
   - Generate delta table + 3 scripts
   - Provide validation test
 
@@ -177,10 +178,11 @@ FROM file_total, charges_total;
 
 - **Separation:** Setup collects, Design generates
 - **Hard Stops:** Don't proceed without prerequisites
-- **Constraints:** Apply DESIGN_CONSTRAINTS.md religiously
+- **Constraints:** Apply `.cursor/rules/design-constraints.mdc` religiously
 - **Reference:** Use fedex_transform/ as example, not template
 - **Simplicity:** 3 scripts + 1 test, nothing more (no extra files)
-- **No File Proliferation:** Don't create extra files, markdown docs, or helper scripts
+- **Documentation:** Carrier docs go in `docs/carriers/`, not in transform folders
+- **No File Proliferation:** Don't create extra files or helper scripts in carrier transform folders
 
 ---
 
@@ -188,7 +190,7 @@ FROM file_total, charges_total;
 
 1. Is it parent_pipeline? → Don't touch
 2. Missing prerequisites? → Ask user, don't assume
-3. Unsure about rule? → Read DESIGN_CONSTRAINTS.md
+3. Unsure about rule? → Read `.cursor/rules/design-constraints.mdc`
 4. Need example? → Look at fedex_transform/
 5. Complex logic? → Preserve from reference_stored_procedure.sql and additional_reference.md
 6. Not sure about mapping? → Present plan first, ask user
