@@ -97,13 +97,13 @@ BEGIN TRY
         @Carrier_id AS carrier_id,
         'Vanlo_' + FORMAT(CAST(LEFT(MAX(d.[Date]), 10) AS DATE), 'yyyy-MM-dd') AS bill_number,
         CAST(LEFT(MAX(d.[Date]), 10) AS DATE) AS bill_date,
-        SsUM(CAST(d.[Cost] AS DECIMAL(18,2))) AS total_amount,
+        SUM(CAST(d.[Cost] AS DECIMAL(18,2))) AS total_amount,
         COUNT(*) AS num_shipments,
         'FALCON' AS account_number,
         @File_id AS file_id
     FROM billing.delta_vanlo_bill d
     WHERE
-        d.[Service] NOT LIKE 'UniUni%'
+        d.[Service] NOT LIKE 'UniUni%' -- Exclude UniUni shipments specifically for Falcon 
         AND NULLIF(TRIM(d.[Tracking Code]), '') IS NOT NULL
         AND NULLIF(TRIM(d.[Date]), '') IS NOT NULL
     HAVING NOT EXISTS (
