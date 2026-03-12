@@ -734,6 +734,38 @@ CREATE TABLE billing.delta_passport_bill (
 );
 
 
+-- VANLO DELTA TABLE
+CREATE TABLE billing.delta_vanlo_bill (
+    [ID] VARCHAR(255) NULL,
+    [Date] VARCHAR(50) NULL,
+    [Order Number] VARCHAR(255) NULL,
+    [Tracking Code] VARCHAR(255) NULL,
+    [Reference] VARCHAR(255) NULL,
+    [From Name] VARCHAR(255) NULL,
+    [From Company] VARCHAR(255) NULL,
+    [From Street1] VARCHAR(255) NULL,
+    [From Street2] VARCHAR(255) NULL,
+    [From City] VARCHAR(100) NULL,
+    [From State] VARCHAR(50) NULL,
+    [From Postal Code] VARCHAR(50) NULL,
+    [From Country] VARCHAR(10) NULL,
+    [To Name] VARCHAR(255) NULL,
+    [To Company] VARCHAR(255) NULL,
+    [To Street1] VARCHAR(255) NULL,
+    [To Street2] VARCHAR(255) NULL,
+    [To City] VARCHAR(100) NULL,
+    [To State] VARCHAR(50) NULL,
+    [To Postal Code] VARCHAR(50) NULL,
+    [To Country] VARCHAR(10) NULL,
+    [Package] VARCHAR(255) NULL,
+    [Weight] VARCHAR(50) NULL,
+    [Zone] VARCHAR(50) NULL,
+    [Service] VARCHAR(255) NULL,
+    [Status] VARCHAR(50) NULL,
+    [Cost] VARCHAR(50) NULL,
+    [Label URL] VARCHAR(1000) NULL,
+    [PrintCustom] VARCHAR(255) NULL
+);
 /*
 ================================================================================
 Normalized Carrier Tables
@@ -1161,6 +1193,47 @@ CREATE NONCLUSTERED INDEX IX_passport_bill_tracking_number
 ON billing.passport_bill (tracking_number, invoice_number, invoice_date);
 
 
+-- VANLO BILL TABLE (Normalized carrier bill line items)
+CREATE TABLE billing.vanlo_bill (
+    id INT IDENTITY(1,1) NOT NULL,
+    carrier_bill_id INT NULL,
+    invoice_number NVARCHAR(50) NOT NULL,
+    invoice_date DATE NOT NULL,
+    shipment_id NVARCHAR(255) NULL,
+    tracking_number NVARCHAR(255) NOT NULL,
+    shipment_date DATETIME2 NULL,
+    integrated_carrier NVARCHAR(50) NULL,
+    service_method NVARCHAR(255) NULL,
+    zone NVARCHAR(50) NULL,
+    cost DECIMAL(18,2) NULL,
+    weight_oz DECIMAL(18,6) NULL,
+    package_length_in DECIMAL(18,2) NULL,
+    package_width_in DECIMAL(18,2) NULL,
+    package_height_in DECIMAL(18,2) NULL,
+    from_postal NVARCHAR(50) NULL,
+    to_postal NVARCHAR(50) NULL,
+    to_city NVARCHAR(100) NULL,
+    to_state NVARCHAR(50) NULL,
+    to_country NVARCHAR(10) NULL,
+    shipment_status NVARCHAR(50) NULL,
+    created_date DATETIME2 DEFAULT SYSDATETIME() NOT NULL,
+
+    CONSTRAINT PK_vanlo_bill PRIMARY KEY (id),
+    CONSTRAINT FK_vanlo_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+        REFERENCES billing.carrier_bill(carrier_bill_id)
+);
+
+-- Index for FK lookup performance (join with carrier_bill)
+CREATE NONCLUSTERED INDEX IX_vanlo_bill_carrier_bill_id
+ON billing.vanlo_bill (carrier_bill_id);
+
+-- Index for incremental processing (used by Insert_Unified_tables.sql)
+CREATE NONCLUSTERED INDEX IX_vanlo_bill_created_date
+ON billing.vanlo_bill (created_date);
+
+-- Composite index for tracking number lookups
+CREATE NONCLUSTERED INDEX IX_vanlo_bill_tracking_number_invoice
+ON billing.vanlo_bill (tracking_number, invoice_number, invoice_date);
 /*
 ================================================================================
 GOLD LAYER TABLES
