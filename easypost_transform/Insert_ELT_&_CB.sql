@@ -23,12 +23,12 @@ Purpose: Two-step transactional data insertion process with file tracking:
             into billing.easypost_bill (Carrier Bill line items)
 
 Invoice Number Generation: 
-         invoice_number = carrier_account_id + '-' + yyyy-MM-dd from created_at
-         Example: "ca_589b9b61d0ed420890f0e826515491dd-2025-01-18"
+         invoice_number = 'EasyPost_' + yyyy-MM-dd from MAX(created_at)
+         Example: "EasyPost_2025-01-18"
          
-         bill_date = CAST(created_at AS DATE)
+         bill_date = CAST(MAX(created_at) AS DATE)
          
-         Note: Same formula used in both INSERTs to ensure deterministic joins
+         Note: Single invoice per file using latest timestamp's date portion
 
 Source:   billing.delta_easypost_bill
 Targets:  billing.carrier_bill (invoice summaries with file_id)
@@ -40,7 +40,8 @@ File Tracking: file_id stored in carrier_bill enables:
                - Selective file retry on failure
 
 Validation: Fails if created_at or tracking_code is NULL or empty
-Match:      invoice_number AND bill_date (INSERT WHERE NOT EXISTS)
+Match:      Step 1: file_id (INSERT WHERE NOT EXISTS)
+            Step 2: carrier_bill_id only (INSERT WHERE NOT EXISTS) per Design Constraint #9
 Transaction: Both inserts wrapped in transaction for atomicity - all succeed or all fail
 
 Execution Order: SECOND in pipeline (after ValidateCarrierInfo.sql)
@@ -63,14 +64,16 @@ BEGIN TRY
     invoice-level summaries in carrier_bill. 
     
     Calculates:
+    - invoice_number: 'EasyPost_' + FORMAT(MAX(created_at) as date, 'yyyy-MM-dd')
+    - invoice_date: CAST(MAX(created_at) AS DATE)
     - total_amount: SUM of postage_fee
     - num_shipments: COUNT of tracking codes per invoice
+    - account_number: carrier_account_id column value
     
     Generates carrier_bill_id values which will be joined in Step 2.
     
-    Invoice Number Formula (deterministic):
-    - invoice_number = carrier_account_id + '-' + FORMAT(created_at date, 'yyyy-MM-dd')
-    - bill_date = CAST(created_at AS DATE)
+    Invoice Grouping Strategy: All shipments in file grouped under single invoice
+    using the latest timestamp's date portion (not full timestamp).
     ================================================================================
     */
 
@@ -85,8 +88,8 @@ BEGIN TRY
     )
     SELECT
         @Carrier_id AS carrier_id,
-        CONCAT(d.carrier_account_id, '-', FORMAT(CAST(d.created_at AS DATE), 'yyyy-MM-dd')) AS bill_number,
-        CAST(d.created_at AS DATE) AS bill_date,
+        'EasyPost_' + FORMAT(CAST(MAX(d.created_at) AS DATE), 'yyyy-MM-dd') AS bill_number,
+        CAST(MAX(d.created_at) AS DATE) AS bill_date,
         SUM(CAST(COALESCE(NULLIF(TRIM(d.postage_fee), ''), '0') AS decimal(18,2))) AS total_amount,
         COUNT(d.tracking_code) AS num_shipments,
         MAX(d.carrier_account_id) AS account_number,
@@ -99,9 +102,6 @@ BEGIN TRY
         AND NULLIF(TRIM(d.created_at), '') IS NOT NULL
         AND d.tracking_code IS NOT NULL
         AND NULLIF(TRIM(d.tracking_code), '') IS NOT NULL
-    GROUP BY
-        d.carrier_account_id,
-        CAST(d.created_at AS DATE)
     HAVING NOT EXISTS (
         SELECT 1
         FROM billing.carrier_bill cb
@@ -118,8 +118,12 @@ BEGIN TRY
     billing.easypost_bill.
     
     Join Strategy:
-    - Compute same invoice_number formula to validate invoice exists in carrier_bill
-    - Use invoice_number + tracking_code in NOT EXISTS check
+    - Join to carrier_bill on carrier_id and file_id (just inserted in Step 1)
+    - Use carrier_bill_id only in NOT EXISTS check (Design Constraint #9)
+    
+    NOTE: EasyPost uses simplified file_id JOIN because of synthetic invoice model:
+          - Step 1 creates ONE invoice per file ('EasyPost_' + date)
+          - Step 2 safely joins on file_id → matches exactly ONE carrier_bill row
     
     Type Conversions:
     - Direct CAST (fail-fast on bad data, no TRY_CAST)
@@ -154,8 +158,8 @@ BEGIN TRY
         -- Shipment identifiers
         TRIM(d.tracking_code) AS tracking_code,
         
-        -- Computed invoice identifiers (same formula as Step 1)
-        CONCAT(d.carrier_account_id, '-', FORMAT(CAST(d.created_at AS DATE), 'yyyy-MM-dd')) AS invoice_number,
+        -- Invoice identifiers from carrier_bill (inserted in Step 1)
+        cb.bill_number AS invoice_number,
 
         -- Foreign key to invoice summary
         cb.carrier_bill_id,
@@ -185,7 +189,7 @@ BEGIN TRY
         CAST(COALESCE(NULLIF(TRIM(d.carbon_offset_fee), ''), '0') AS decimal(18,2)) AS carbon_offset_fee,
         
         -- Bill date
-        CAST(d.created_at AS DATE) AS bill_date,
+        cb.bill_date AS bill_date,
         
         -- Service information
         d.service,
@@ -195,9 +199,8 @@ BEGIN TRY
     FROM
         billing.delta_easypost_bill AS d
     INNER JOIN billing.carrier_bill cb
-        ON cb.bill_number = CONCAT(d.carrier_account_id, '-', FORMAT(CAST(d.created_at AS DATE), 'yyyy-MM-dd'))
-        AND cb.bill_date = CAST(d.created_at AS DATE)
-        AND cb.carrier_id = @Carrier_id  -- Always include carrier_id in join
+        ON cb.carrier_id = @Carrier_id
+        AND cb.file_id = @File_id  -- Join to the record just inserted in Step 1
     WHERE
         -- Validation: Fail fast on bad data
         d.created_at IS NOT NULL 
