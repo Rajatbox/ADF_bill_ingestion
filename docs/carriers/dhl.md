@@ -1,106 +1,120 @@
-The invoice number and invoice date would be pulled from the header record and would come at the last of the csv while ingesting from adf, so make sure to include those in delta schema. 
+# DHL Billing Data Specification
 
-DHL
-Here is an example bill
-A lot of blank columns in between the columns that we need
-The first line of the file is not the header, it actually contains important summary information.
-Cell B1 in the spreadsheet represents bill date
-Cell C1 is invoice number
-Cell D1 is account number
-Cells G1:K1 shows the warehouse address, can be used to verify the upload matches the correct account and warehouse 
-Cell L1 shows the total bill amount
-Cell N1 shows the number of shipments on the bill
-Then there is not a header/column name row, the data just starts in the second row
-Each shipment will have two lines, but the second line doesn’t add any value, so really it’s just each shipment is represented on a single row
-Different columns have each charge type and amounts
-There can be both domestic and international shipments on the same bill, and there are different
-The total charge amount for the shipment is the sum of columns 30, 48, 65, and 79
-Need to verify on each bill upload that SUM(column 30, 48, 65, and 79) == Cell L1
-Falcon currently only ships DDU with DHL, so there are no duties and taxes on the bill for DHL international shipments. So I’m not
-There used to be a DHL International upload, they now get them in the same file, but we should still prepare for DHL international upload if other customers have them
+## File Structure
 
-Column 1:
-Column 2: Account Number
-Column 3:
-Column 4:
-Column 5:
-Column 6:
-Column 7:
-Column 8:
-Column 9: Shipping Date
-Column 10:
-Column 11:
-Column 12: Tracking Number (for International Shipments Only)
-Column 13: unique_id (for Domestic Shipments Only)
-This is the tracking number column, but it’s technically only part of it. The way you get domestic tracking numbers from DHL bills is by combining “420” + the first 5 digits of zip code (leading zeroes included if it’s a 4 digit zip code) + unique_id column
-Column 14:
-Column 15: Recipient Address Line 1
-Column 16: Recipient Address Line 2
-Column 17: Recipient City
-Column 18: Recipient State/Province
-Column 19: Recipient Zip/Postal Code
-Column 20: Recipient Country
-Can use country to indicate domestic or international shipment
-Column 21:
-Column 22: Shipping Method
-Column 23: Shipped Weight
-Column 24: Shipped Weight Unit of Measure
-Column 25: Billed Weight
-Column 26: Billed Weight Unit of Measure
-Column 27:
-Column 28:
-Column 29: Zone
-Column 30: Transportation Cost
-Column 31:
-Column 32:
-Column 33:
-Column 34:
-Column 35:
-Column 36:
-Column 37:
-Column 38:
-Column 39:
-Column 40:
-Column 41:
-Column 42:
-Column 43:
-Column 44:
-Column 45:
-Column 46:
-Column 47:
-Column 48: Non-Qualified Dimensional Charges
-Column 49:
-Column 50:
-Column 51:
-Column 52:
-Column 53:
-Column 54:
-Column 55:
-Column 56:
-Column 57:
-Column 58:
-Column 59:
-Column 60:
-Column 61:
-Column 62:
-Column 63:
-Column 64:
-Column 65: Fuel Surcharge Amount
-Column 66:
-Column 67: Overlabel Tracking Number
-Column 68:
-Column 69:
-Column 70:
-Column 71:
-Column 72:
-Column 73:
-Column 74:
-Column 75:
-Column 76:
-Column 77:
-Column 78:
-Column 79: Delivery Area Surcharge Amount
+- Row 1 is the header record (HDR) -- not a shipment row
+  - B1 = bill date, C1 = invoice number, D1 = account number
+  - G1:K1 = warehouse address (verify account/warehouse match)
+  - L1 = total bill amount, N1 = number of shipments
+- No column-name header row; data starts at row 2
+- Each shipment produces two rows; the second row adds no value (skip it)
+- Both domestic and international shipments can appear in the same file
 
+## Tracking Number Logic
 
-DHL International
+- **International**: Column 12 (`customer_confirm`) used as-is
+- **Domestic**: `'420' + LEFT(zip, 5) + Column 13 (delivery_confirm)`
+- **Resolution**: `recipient_country = 'US'` → domestic; otherwise → international
 
+## Two-Layer Naming Convention
+
+| Layer | Table | Naming Rule |
+|-------|-------|-------------|
+| Bronze | `billing.delta_dhl_bill` | DHL official field names in snake_case -- mirrors source exactly |
+| Silver | `billing.dhl_bill` | Our custom/friendly column names |
+
+The `Insert_ELT_&_CB.sql` script maps bronze names to silver names.
+
+## Total Validation
+
+`total_amount = SUM of all 38 charge columns` (see charge columns marked below).  
+Must equal Cell L1 from the HDR row.
+
+## Column Mapping (79 columns)
+
+| Col # | Excel | DHL Name (delta_dhl_bill)    | Old delta column                           | dhl_bill column (silver)                  |
+| ----- | ----- | ---------------------------- | ------------------------------------------ | ----------------------------------------- |
+| 1     | A     | record_type_2                | Prop_1                                     | -                                         |
+| 2     | B     | sold_to                      | account_number                             | - (goes to carrier_bill.account_number)   |
+| 3     | C     | inventory_positioner         | Prop_3                                     | -                                         |
+| 4     | D     | bol_number                   | Prop_4                                     | -                                         |
+| 5     | E     | Prop_5                       | Prop_5                                     | -                                         |
+| 6     | F     | billing_ref1                 | Prop_6                                     | -                                         |
+| 7     | G     | processing_facility          | Prop_7                                     | -                                         |
+| 8     | H     | pickup_from                  | Prop_8                                     | -                                         |
+| 9     | I     | pickup_date                  | shipping_date                              | shipping_date                             |
+| 10    | J     | pickup_time                  | Prop_10                                    | -                                         |
+| 11    | K     | internal_tracking            | Prop_11                                    | -                                         |
+| 12    | L     | customer_confirm             | international_tracking_number              | international_tracking_number             |
+| 13    | M     | delivery_confirm             | domestic_tracking_number                   | domestic_tracking_number (420+zip5+col13) |
+| 14    | N     | Prop_14                      | Prop_14                                    | -                                         |
+| 15    | O     | recipient_address1           | recipient_address_line_1                   | -                                         |
+| 16    | P     | recipient_address2           | recipient_address_line_2                   | -                                         |
+| 17    | Q     | recipient_city               | recipient_city                             | -                                         |
+| 18    | R     | recipient_state              | recipient_state_province                   | -                                         |
+| 19    | S     | recipient_zip                | recipient_zip_postal_code                  | recipient_zip_postal_code                 |
+| 20    | T     | recipient_country            | recipient_country                          | recipient_country                         |
+| 21    | U     | material_or_vas_num          | Prop_21                                    | -                                         |
+| 22    | V     | material_or_vas_desc         | shipping_method                            | shipping_method                           |
+| 23    | W     | actual_weight                | shipped_weight                             | shipped_weight                            |
+| 24    | X     | uom_actual_weight            | shipped_weight_unit_of_measure             | shipped_weight_unit                       |
+| 25    | Y     | billing_weight               | billed_weight                              | billed_weight                             |
+| 26    | Z     | uom_billing_weight           | billed_weight_unit_of_measure              | billed_weight_unit                        |
+| 27    | AA    | quantity                     | Prop_27                                    | -                                         |
+| 28    | AB    | uom_quantity                 | Prop_28                                    | -                                         |
+| 29    | AC    | pricing_zone                 | [zone]                                     | [zone]                                    |
+| 30    | AD    | charge                       | transportation_cost                        | transportation_cost                       |
+| 31    | AE    | billing_ref2_or_cust_ref1    | Prop_31                                    | -                                         |
+| 32    | AF    | cust_reference2              | Prop_32                                    | -                                         |
+| 33    | AG    | workshare_dropoff            | Prop_33                                    | workshare_dropoff                         |
+| 34    | AH    | workshare_sort               | Prop_34                                    | workshare_sort                            |
+| 35    | AI    | workshare_stamp              | Prop_35                                    | workshare_stamp                           |
+| 36    | AJ    | workshare_machine            | Prop_36                                    | workshare_machine                         |
+| 37    | AK    | workshare_manifest           | Prop_37                                    | workshare_manifest                        |
+| 38    | AL    | workshare_bpm                | Prop_38                                    | workshare_bpm                             |
+| 39    | AM    | workshare_future_use_1       | Prop_39                                    | - (reserved for future use)               |
+| 40    | AN    | workshare_future_use_2       | Prop_40                                    | - (reserved for future use)               |
+| 41    | AO    | workshare_future_use_3       | Prop_41                                    | - (reserved for future use)               |
+| 42    | AP    | surcharge_content_endorse    | Prop_42                                    | surcharge_content_endorse                 |
+| 43    | AQ    | surcharge_unassignable_add   | Prop_43                                    | surcharge_unassignable_add                |
+| 44    | AR    | surcharge_special_handling   | Prop_44                                    | surcharge_special_handling                |
+| 45    | AS    | surcharge_late_arrival       | Prop_45                                    | surcharge_late_arrival                    |
+| 46    | AT    | surcharge_usps_qualif        | Prop_46                                    | surcharge_usps_qualif                     |
+| 47    | AU    | surcharge_client_srd         | Prop_47                                    | surcharge_client_srd                      |
+| 48    | AV    | surcharge_nqd                | non_qualified_dimensional_charges          | non_qualified_dimensional_charges         |
+| 49    | AW    | returned_mail_unassignable   | Prop_49                                    | returned_mail_unassignable                |
+| 50    | AX    | returned_mail_unprocessable  | Prop_50                                    | returned_mail_unprocessable               |
+| 51    | AY    | returned_mail_recall         | Prop_51                                    | returned_mail_recall                      |
+| 52    | AZ    | returned_mail_duplicate      | Prop_52                                    | returned_mail_duplicate                   |
+| 53    | BA    | returned_mail_cont_assur     | Prop_53                                    | returned_mail_cont_assur                  |
+| 54    | BB    | returned_mail_move_update    | Prop_54                                    | returned_mail_move_update                 |
+| 55    | BC    | gst_tax                      | Prop_55                                    | gst_tax                                   |
+| 56    | BD    | hst_tax                      | Prop_56                                    | hst_tax                                   |
+| 57    | BE    | pst_tax                      | Prop_57                                    | pst_tax                                   |
+| 58    | BF    | vat_tax                      | Prop_58                                    | vat_tax                                   |
+| 59    | BG    | duties                       | Prop_59                                    | duties                                    |
+| 60    | BH    | other_tax                    | Prop_60                                    | other_tax                                 |
+| 61    | BI    | returned_mail_paper_invoice  | Prop_61                                    | returned_mail_paper_invoice               |
+| 62    | BJ    | returned_mail_screening      | Prop_62                                    | returned_mail_screening                   |
+| 63    | BK    | returned_mail_non_auto_flats | Prop_63                                    | returned_mail_non_auto_flats              |
+| 64    | BL    | xb_customs_surcharge         | Prop_64                                    | xb_customs_surcharge                      |
+| 65    | BM    | surcharge_fuel               | fuel_surcharge_amount                      | fuel_surcharge_amount                     |
+| 66    | BN    | min_pickup_charge            | Prop_66                                    | min_pickup_charge                         |
+| 67    | BO    | overlabeled_value            | overlabel_tracking_number                  | -                                         |
+| 68    | BP    | dim_weight                   | Prop_68                                    | -                                         |
+| 69    | BQ    | uom_dim_weight               | Prop_69                                    | -                                         |
+| 70    | BR    | dim_length                   | Prop_70                                    | -                                         |
+| 71    | BS    | dim_width                    | Prop_71                                    | -                                         |
+| 72    | BT    | dim_height                   | Prop_72                                    | -                                         |
+| 73    | BU    | uom_dims                     | Prop_73                                    | -                                         |
+| 74    | BV    | peak_surcharge               | Prop_74                                    | peak_surcharge                            |
+| 75    | BW    | broker_fee                   | Prop_75                                    | broker_fee                                |
+| 76    | BX    | extra_length_surcharge       | Prop_76                                    | extra_length_surcharge                    |
+| 77    | BY    | extra_volume_surcharge       | Prop_77                                    | extra_volume_surcharge                    |
+| 78    | BZ    | delivery_area_surcharge      | Prop_78                                    | **delivery_area_surcharge_amount**        |
+| 79    | CA    | dangerous_goods_charge       | delivery_area_surcharge_amount (WRONG)     | **dangerous_goods_charge**                |
+
+- Col 3 = DHL official name in snake_case -- this becomes the `delta_dhl_bill` column name (bronze)
+- Col 4 = what the delta column was called before this change
+- Col 5 = the `dhl_bill` column name (silver); `-` means not carried to silver
+- **Rows 78/79 are the critical fix** -- DAS was mapped at Col 79 but actually lives at Col 78

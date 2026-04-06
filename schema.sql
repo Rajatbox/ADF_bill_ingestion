@@ -516,85 +516,85 @@ CREATE TABLE billing.delta_ups_bill (
 -- Named columns use the documented name; unnamed columns use Prop_N (N = column number).
 -- ADF Prop (0-indexed) shown in comments for ADF column mapping configuration.
 CREATE TABLE billing.delta_dhl_bill (
-	Prop_1 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 1  (ADF: Prop_0)
-	account_number varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                          -- Col 2  (ADF: Prop_1):  Account Number
-	Prop_3 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 3  (ADF: Prop_2)
-	Prop_4 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 4  (ADF: Prop_3)
-	Prop_5 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 5  (ADF: Prop_4)
-	Prop_6 varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 6  (ADF: Prop_5)
-	Prop_7 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 7  (ADF: Prop_6)
-	Prop_8 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 8  (ADF: Prop_7)
-	shipping_date varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                           -- Col 9  (ADF: Prop_8):  Shipping Date
-	Prop_10 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 10 (ADF: Prop_9)
-	Prop_11 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 11 (ADF: Prop_10)
-	international_tracking_number varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,          -- Col 12 (ADF: Prop_11): Tracking Number (International Shipments)
-	domestic_tracking_number varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 13 (ADF: Prop_12): unique_id (Domestic Shipments)
-	Prop_14 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 14 (ADF: Prop_13)
-	recipient_address_line_1 varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 15 (ADF: Prop_14): Recipient Address Line 1
-	recipient_address_line_2 varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 16 (ADF: Prop_15): Recipient Address Line 2
+	record_type_2 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                           -- Col 1  (ADF: Prop_0):  Record Type (always DTL)
+	sold_to varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 2  (ADF: Prop_1):  SoldTo Number
+	inventory_positioner varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                    -- Col 3  (ADF: Prop_2):  Inventory Positioner
+	bol_number varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                              -- Col 4  (ADF: Prop_3):  Bill of Lading Number
+	Prop_5 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 5  (ADF: Prop_4):  Null field
+	billing_ref1 varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                           -- Col 6  (ADF: Prop_5):  Billing Reference 1 (Domestic)
+	processing_facility varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                     -- Col 7  (ADF: Prop_6):  Processing Facility
+	pickup_from varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                             -- Col 8  (ADF: Prop_7):  Pickup Account Number
+	pickup_date varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                             -- Col 9  (ADF: Prop_8):  Pickup Date (YYYYMMDD)
+	pickup_time varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                             -- Col 10 (ADF: Prop_9):  Pickup Time (HHMMSS)
+	internal_tracking varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                       -- Col 11 (ADF: Prop_10): Internal Tracking Number
+	customer_confirm varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                       -- Col 12 (ADF: Prop_11): Customer Confirmation Number
+	delivery_confirm varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                       -- Col 13 (ADF: Prop_12): Delivery Confirmation Number
+	Prop_14 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 14 (ADF: Prop_13): Null field
+	recipient_address1 varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                     -- Col 15 (ADF: Prop_14): Recipient Address Line 1
+	recipient_address2 varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                     -- Col 16 (ADF: Prop_15): Recipient Address Line 2
 	recipient_city varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                         -- Col 17 (ADF: Prop_16): Recipient City
-	recipient_state_province varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                -- Col 18 (ADF: Prop_17): Recipient State/Province
-	recipient_zip_postal_code varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 19 (ADF: Prop_18): Recipient Zip/Postal Code
+	recipient_state varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                         -- Col 18 (ADF: Prop_17): Recipient State
+	recipient_zip varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                           -- Col 19 (ADF: Prop_18): Recipient ZIP
 	recipient_country varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                       -- Col 20 (ADF: Prop_19): Recipient Country
-	Prop_21 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 21 (ADF: Prop_20)
-	shipping_method varchar(350) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                        -- Col 22 (ADF: Prop_21): Shipping Method
-	shipped_weight varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                          -- Col 23 (ADF: Prop_22): Shipped Weight
-	shipped_weight_unit_of_measure varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,          -- Col 24 (ADF: Prop_23): Shipped Weight Unit of Measure
-	billed_weight varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                           -- Col 25 (ADF: Prop_24): Billed Weight
-	billed_weight_unit_of_measure varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,           -- Col 26 (ADF: Prop_25): Billed Weight Unit of Measure
-	Prop_27 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 27 (ADF: Prop_26)
-	Prop_28 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 28 (ADF: Prop_27)
-	[zone] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 29 (ADF: Prop_28): Zone
-	transportation_cost varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                     -- Col 30 (ADF: Prop_29): Transportation Cost
-	Prop_31 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 31 (ADF: Prop_30)
-	Prop_32 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 32 (ADF: Prop_31)
-	Prop_33 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 33 (ADF: Prop_32)
-	Prop_34 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 34 (ADF: Prop_33)
-	Prop_35 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 35 (ADF: Prop_34)
-	Prop_36 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 36 (ADF: Prop_35)
-	Prop_37 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 37 (ADF: Prop_36)
-	Prop_38 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 38 (ADF: Prop_37)
-	Prop_39 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 39 (ADF: Prop_38)
-	Prop_40 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 40 (ADF: Prop_39)
-	Prop_41 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 41 (ADF: Prop_40)
-	Prop_42 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 42 (ADF: Prop_41)
-	Prop_43 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 43 (ADF: Prop_42)
-	Prop_44 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 44 (ADF: Prop_43)
-	Prop_45 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 45 (ADF: Prop_44)
-	Prop_46 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 46 (ADF: Prop_45)
-	Prop_47 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 47 (ADF: Prop_46)
-	non_qualified_dimensional_charges varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,       -- Col 48 (ADF: Prop_47): Non-Qualified Dimensional Charges
-	Prop_49 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 49 (ADF: Prop_48)
-	Prop_50 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 50 (ADF: Prop_49)
-	Prop_51 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 51 (ADF: Prop_50)
-	Prop_52 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 52 (ADF: Prop_51)
-	Prop_53 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 53 (ADF: Prop_52)
-	Prop_54 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 54 (ADF: Prop_53)
-	Prop_55 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 55 (ADF: Prop_54)
-	Prop_56 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 56 (ADF: Prop_55)
-	Prop_57 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 57 (ADF: Prop_56)
-	Prop_58 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 58 (ADF: Prop_57)
-	Prop_59 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 59 (ADF: Prop_58)
-	Prop_60 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 60 (ADF: Prop_59)
-	Prop_61 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 61 (ADF: Prop_60)
-	Prop_62 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 62 (ADF: Prop_61)
-	Prop_63 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 63 (ADF: Prop_62)
-	Prop_64 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 64 (ADF: Prop_63)
-	fuel_surcharge_amount varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                   -- Col 65 (ADF: Prop_64): Fuel Surcharge Amount
-	Prop_66 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 66 (ADF: Prop_65)
-	overlabel_tracking_number varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,              -- Col 67 (ADF: Prop_66): Overlabel Tracking Number
-	Prop_68 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 68 (ADF: Prop_67)
-	Prop_69 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 69 (ADF: Prop_68)
-	Prop_70 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 70 (ADF: Prop_69)
-	Prop_71 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 71 (ADF: Prop_70)
-	Prop_72 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 72 (ADF: Prop_71)
-	Prop_73 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 73 (ADF: Prop_72)
-	Prop_74 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 74 (ADF: Prop_73)
-	Prop_75 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 75 (ADF: Prop_74)
-	Prop_76 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 76 (ADF: Prop_75)
-	Prop_77 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 77 (ADF: Prop_76)
-	Prop_78 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 78 (ADF: Prop_77)
-	delivery_area_surcharge_amount varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,          -- Col 79 (ADF: Prop_78): Delivery Area Surcharge Amount
+	material_or_vas_num varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                     -- Col 21 (ADF: Prop_20): Material/VAS Number
+	material_or_vas_desc varchar(350) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                   -- Col 22 (ADF: Prop_21): Material/VAS Description
+	actual_weight varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                           -- Col 23 (ADF: Prop_22): Actual Weight
+	uom_actual_weight varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                       -- Col 24 (ADF: Prop_23): UOM Actual Weight
+	billing_weight varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                          -- Col 25 (ADF: Prop_24): Billing Weight
+	uom_billing_weight varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                      -- Col 26 (ADF: Prop_25): UOM Billing Weight
+	quantity varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                -- Col 27 (ADF: Prop_26): Quantity
+	uom_quantity varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                            -- Col 28 (ADF: Prop_27): UOM Quantity
+	pricing_zone varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                            -- Col 29 (ADF: Prop_28): Pricing Zone
+	charge varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 30 (ADF: Prop_29): Base Charge
+	billing_ref2_or_cust_ref1 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 31 (ADF: Prop_30): Billing Ref2 / Cust Ref1
+	cust_reference2 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                         -- Col 32 (ADF: Prop_31): Customer Reference 2
+	workshare_dropoff varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                       -- Col 33 (ADF: Prop_32): Workshare - Dropoff
+	workshare_sort varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                          -- Col 34 (ADF: Prop_33): Workshare - Sort
+	workshare_stamp varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                         -- Col 35 (ADF: Prop_34): Workshare - Stamp
+	workshare_machine varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                       -- Col 36 (ADF: Prop_35): Workshare - Machine
+	workshare_manifest varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                      -- Col 37 (ADF: Prop_36): Workshare - Manifest
+	workshare_bpm varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                           -- Col 38 (ADF: Prop_37): Workshare - BPM
+	workshare_future_use_1 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                  -- Col 39 (ADF: Prop_38): Reserved for future use
+	workshare_future_use_2 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                  -- Col 40 (ADF: Prop_39): Reserved for future use
+	workshare_future_use_3 varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                  -- Col 41 (ADF: Prop_40): Reserved for future use
+	surcharge_content_endorse varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 42 (ADF: Prop_41): Content Endorsement
+	surcharge_unassignable_add varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,              -- Col 43 (ADF: Prop_42): Unassignable Address
+	surcharge_special_handling varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,              -- Col 44 (ADF: Prop_43): Special Handling
+	surcharge_late_arrival varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                  -- Col 45 (ADF: Prop_44): Late Arrival
+	surcharge_usps_qualif varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                   -- Col 46 (ADF: Prop_45): USPS Qualification
+	surcharge_client_srd varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                    -- Col 47 (ADF: Prop_46): Client SRD
+	surcharge_nqd varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                           -- Col 48 (ADF: Prop_47): Non-Qualified Dimension
+	returned_mail_unassignable varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,              -- Col 49 (ADF: Prop_48): Returned Mail - Unassignable
+	returned_mail_unprocessable varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,             -- Col 50 (ADF: Prop_49): Returned Mail - Unprocessable
+	returned_mail_recall varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                    -- Col 51 (ADF: Prop_50): Returned Mail - Recall
+	returned_mail_duplicate varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                 -- Col 52 (ADF: Prop_51): Returned Mail - Duplicate
+	returned_mail_cont_assur varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                -- Col 53 (ADF: Prop_52): Returned Mail - Content Assurance
+	returned_mail_move_update varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,               -- Col 54 (ADF: Prop_53): Returned Mail - Move Update
+	gst_tax varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 55 (ADF: Prop_54): GST Tax
+	hst_tax varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 56 (ADF: Prop_55): HST Tax
+	pst_tax varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 57 (ADF: Prop_56): PST Tax
+	vat_tax varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                 -- Col 58 (ADF: Prop_57): VAT Tax
+	duties varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                  -- Col 59 (ADF: Prop_58): Duties
+	other_tax varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                               -- Col 60 (ADF: Prop_59): Other Tax
+	returned_mail_paper_invoice varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,             -- Col 61 (ADF: Prop_60): Returned Mail - Paper Invoice
+	returned_mail_screening varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                 -- Col 62 (ADF: Prop_61): Returned Mail - Screening
+	returned_mail_non_auto_flats varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,            -- Col 63 (ADF: Prop_62): Returned Mail - Non-Auto Flats
+	xb_customs_surcharge varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                    -- Col 64 (ADF: Prop_63): Cross-Border Customs Surcharge
+	surcharge_fuel varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                          -- Col 65 (ADF: Prop_64): Fuel Surcharge
+	min_pickup_charge varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                       -- Col 66 (ADF: Prop_65): Minimum Pickup Charge
+	overlabeled_value varchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                      -- Col 67 (ADF: Prop_66): Original Tracking (Overlabel)
+	dim_weight varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                              -- Col 68 (ADF: Prop_67): Dimensional Weight
+	uom_dim_weight varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                          -- Col 69 (ADF: Prop_68): UOM Dimensional Weight
+	dim_length varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                              -- Col 70 (ADF: Prop_69): Package Length
+	dim_width varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                               -- Col 71 (ADF: Prop_70): Package Width
+	dim_height varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                              -- Col 72 (ADF: Prop_71): Package Height
+	uom_dims varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                -- Col 73 (ADF: Prop_72): UOM Dimensions
+	peak_surcharge varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                          -- Col 74 (ADF: Prop_73): Peak Surcharge
+	broker_fee varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                              -- Col 75 (ADF: Prop_74): Broker Fee
+	extra_length_surcharge varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                  -- Col 76 (ADF: Prop_75): Extra Length Surcharge
+	extra_volume_surcharge varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                  -- Col 77 (ADF: Prop_76): Extra Volume Surcharge
+	delivery_area_surcharge varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                 -- Col 78 (ADF: Prop_77): Delivery Area Surcharge (DAS)
+	dangerous_goods_charge varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                  -- Col 79 (ADF: Prop_78): Dangerous Goods Charge
 	-- ADF-appended columns from HDR row:
 	invoice_number varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	invoice_date varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
@@ -969,9 +969,43 @@ CREATE TABLE billing.dhl_bill (
 	billed_weight_unit nvarchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                     -- Col 26
 	[zone] nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,                                -- Col 29
 	transportation_cost decimal(18,2) NULL,                                                        -- Col 30
+	workshare_dropoff decimal(18,2) NULL,                                                          -- Col 33
+	workshare_sort decimal(18,2) NULL,                                                             -- Col 34
+	workshare_stamp decimal(18,2) NULL,                                                            -- Col 35
+	workshare_machine decimal(18,2) NULL,                                                          -- Col 36
+	workshare_manifest decimal(18,2) NULL,                                                         -- Col 37
+	workshare_bpm decimal(18,2) NULL,                                                              -- Col 38
+	surcharge_content_endorse decimal(18,2) NULL,                                                  -- Col 42
+	surcharge_unassignable_add decimal(18,2) NULL,                                                 -- Col 43
+	surcharge_special_handling decimal(18,2) NULL,                                                 -- Col 44
+	surcharge_late_arrival decimal(18,2) NULL,                                                     -- Col 45
+	surcharge_usps_qualif decimal(18,2) NULL,                                                      -- Col 46
+	surcharge_client_srd decimal(18,2) NULL,                                                       -- Col 47
 	non_qualified_dimensional_charges decimal(18,2) NULL,                                          -- Col 48
+	returned_mail_unassignable decimal(18,2) NULL,                                                 -- Col 49
+	returned_mail_unprocessable decimal(18,2) NULL,                                                -- Col 50
+	returned_mail_recall decimal(18,2) NULL,                                                       -- Col 51
+	returned_mail_duplicate decimal(18,2) NULL,                                                    -- Col 52
+	returned_mail_cont_assur decimal(18,2) NULL,                                                   -- Col 53
+	returned_mail_move_update decimal(18,2) NULL,                                                  -- Col 54
+	gst_tax decimal(18,2) NULL,                                                                    -- Col 55
+	hst_tax decimal(18,2) NULL,                                                                    -- Col 56
+	pst_tax decimal(18,2) NULL,                                                                    -- Col 57
+	vat_tax decimal(18,2) NULL,                                                                    -- Col 58
+	duties decimal(18,2) NULL,                                                                     -- Col 59
+	other_tax decimal(18,2) NULL,                                                                  -- Col 60
+	returned_mail_paper_invoice decimal(18,2) NULL,                                                -- Col 61
+	returned_mail_screening decimal(18,2) NULL,                                                    -- Col 62
+	returned_mail_non_auto_flats decimal(18,2) NULL,                                               -- Col 63
+	xb_customs_surcharge decimal(18,2) NULL,                                                       -- Col 64
 	fuel_surcharge_amount decimal(18,2) NULL,                                                      -- Col 65
-	delivery_area_surcharge_amount decimal(18,2) NULL,                                             -- Col 79
+	min_pickup_charge decimal(18,2) NULL,                                                          -- Col 66
+	peak_surcharge decimal(18,2) NULL,                                                             -- Col 74
+	broker_fee decimal(18,2) NULL,                                                                 -- Col 75
+	extra_length_surcharge decimal(18,2) NULL,                                                     -- Col 76
+	extra_volume_surcharge decimal(18,2) NULL,                                                     -- Col 77
+	delivery_area_surcharge_amount decimal(18,2) NULL,                                             -- Col 78 (DAS)
+	dangerous_goods_charge decimal(18,2) NULL,                                                     -- Col 79
 	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
 
 	CONSTRAINT PK_dhl_bill PRIMARY KEY (id),
@@ -1574,6 +1608,72 @@ OUTER APPLY (
 ) v (charge_type, charge_amount)
 WHERE NULLIF(v.charge_type, '') IS NOT NULL
   AND v.charge_amount IS NOT NULL
+  AND v.charge_amount <> 0;
+
+-----------------------------------------------------------------------------------------------------------------
+-- View: DHL Charges (Unpivot)
+-----------------------------------------------------------------------------------------------------------------
+-- Purpose: Unpivots DHL bill wide format (38 charge columns) into narrow format
+-- Design: Uses OUTER APPLY to unpivot static charge column/amount pairs
+-- Usage: Used by Sync_Reference_Data.sql and Insert_Unified_tables.sql
+
+CREATE VIEW billing.vw_DHLCharges
+AS
+SELECT
+    dhl.carrier_bill_id,
+    dhl.invoice_number,
+    CASE 
+        WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
+        ELSE dhl.international_tracking_number
+    END AS tracking_number,
+    dhl.created_date,
+    cb.file_id,
+    v.charge_type,
+    v.charge_amount
+FROM billing.dhl_bill dhl
+JOIN billing.carrier_bill cb ON cb.carrier_bill_id = dhl.carrier_bill_id
+OUTER APPLY (
+    VALUES
+        (N'Transportation Cost',            dhl.transportation_cost),
+        (N'Workshare Dropoff',              dhl.workshare_dropoff),
+        (N'Workshare Sort',                 dhl.workshare_sort),
+        (N'Workshare Stamp',                dhl.workshare_stamp),
+        (N'Workshare Machine',              dhl.workshare_machine),
+        (N'Workshare Manifest',             dhl.workshare_manifest),
+        (N'Workshare Bpm',                  dhl.workshare_bpm),
+        (N'Surcharge Content Endorse',      dhl.surcharge_content_endorse),
+        (N'Surcharge Unassignable Add',     dhl.surcharge_unassignable_add),
+        (N'Surcharge Special Handling',     dhl.surcharge_special_handling),
+        (N'Surcharge Late Arrival',         dhl.surcharge_late_arrival),
+        (N'Surcharge Usps Qualif',          dhl.surcharge_usps_qualif),
+        (N'Surcharge Client Srd',           dhl.surcharge_client_srd),
+        (N'Non-Qualified Dim',              dhl.non_qualified_dimensional_charges),
+        (N'Returned Mail Unassignable',     dhl.returned_mail_unassignable),
+        (N'Returned Mail Unprocessable',    dhl.returned_mail_unprocessable),
+        (N'Returned Mail Recall',           dhl.returned_mail_recall),
+        (N'Returned Mail Duplicate',        dhl.returned_mail_duplicate),
+        (N'Returned Mail Cont Assur',       dhl.returned_mail_cont_assur),
+        (N'Returned Mail Move Update',      dhl.returned_mail_move_update),
+        (N'Gst Tax',                        dhl.gst_tax),
+        (N'Hst Tax',                        dhl.hst_tax),
+        (N'Pst Tax',                        dhl.pst_tax),
+        (N'Vat Tax',                        dhl.vat_tax),
+        (N'Duties',                         dhl.duties),
+        (N'Other Tax',                      dhl.other_tax),
+        (N'Returned Mail Paper Invoice',    dhl.returned_mail_paper_invoice),
+        (N'Returned Mail Screening',        dhl.returned_mail_screening),
+        (N'Returned Mail Non Auto Flats',   dhl.returned_mail_non_auto_flats),
+        (N'Xb Customs Surcharge',           dhl.xb_customs_surcharge),
+        (N'Fuel Surcharge',                 dhl.fuel_surcharge_amount),
+        (N'Min Pickup Charge',              dhl.min_pickup_charge),
+        (N'Peak Surcharge',                 dhl.peak_surcharge),
+        (N'Broker Fee',                     dhl.broker_fee),
+        (N'Extra Length Surcharge',         dhl.extra_length_surcharge),
+        (N'Extra Volume Surcharge',         dhl.extra_volume_surcharge),
+        (N'Delivery Area Surcharge',        dhl.delivery_area_surcharge_amount),
+        (N'Dangerous Goods Charge',         dhl.dangerous_goods_charge)
+) v (charge_type, charge_amount)
+WHERE v.charge_amount IS NOT NULL
   AND v.charge_amount <> 0;
 
 -----------------------------------------------------------------------------------------------------------------

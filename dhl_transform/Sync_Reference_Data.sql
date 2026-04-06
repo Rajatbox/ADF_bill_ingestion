@@ -19,11 +19,10 @@ Purpose: Automatically populate and maintain reference tables by discovering
          new values from processed DHL billing data.
          
          Block 1: Sync shipping_method (discovered from data)
-         Block 2: ONE-TIME SEED of 4 fixed DHL charge types (static)
+         Block 2: Charge types are static -- seeded via migration.sql (commented out)
 
 Source:  billing.dhl_bill + carrier_bill JOIN (file_id filtered)
 Targets: dbo.shipping_method
-         dbo.charge_types (one-time seed of 4 fixed charges)
 
 File-Based Filtering: Uses @File_id to process only the current file's data:
          - Joins carrier_bill to filter by file_id
@@ -74,7 +73,7 @@ FROM
     billing.dhl_bill dhl
     JOIN billing.carrier_bill cb ON cb.carrier_bill_id = dhl.carrier_bill_id
 WHERE 
-    cb.file_id = @File_id  -- File-based filtering
+    cb.file_id = @File_id
     AND dhl.shipping_method IS NOT NULL
     AND NULLIF(TRIM(CAST(dhl.shipping_method AS varchar(255))), '') IS NOT NULL
     AND NOT EXISTS (
@@ -88,50 +87,46 @@ SET @ShippingMethodsAdded = @@ROWCOUNT;
 
 /*
 ================================================================================
-ONE-TIME SEED: Synchronize Charge Types (DHL Fixed Charges)
+Block 2: Synchronize Charge Types (SEEDED VIA MIGRATION)
 ================================================================================
-DHL has a wide deterministic format with 4 fixed charge columns:
-- Transportation Cost (freight)
-- Non-Qualified Dim
-- Fuel Surcharge
-- Delivery Area Surcharge
-
-This block seeds these static charge types if they don't exist.
-After first run, this will no-op due to NOT EXISTS check.
-
-Note: All DHL charge types default to charge_category_id = 11 (Other)
+DHL charge types are static -- all 38 are seeded in migration.sql (Part 5).
+This block is kept commented out as a fallback if re-seeding is ever needed.
 ================================================================================
-
 
 INSERT INTO dbo.charge_types (
     carrier_id,
     charge_name,
     freight,
-    charge_category_id  -- FK to dbo.charge_type_category.id
+    dt,
+    charge_category_id
 )
-SELECT charge_data.carrier_id, charge_data.charge_name, charge_data.freight, charge_data.charge_category_id
-FROM (
-    VALUES 
-        (@Carrier_id, 'Transportation Cost', 1, 15),  -- Freight charge
-        (@Carrier_id, 'Non-Qualified Dim', 0, 12),
-        (@Carrier_id, 'Fuel Surcharge', 0, 8),
-        (@Carrier_id, 'Delivery Area Surcharge', 0, 4)
-) AS charge_data(carrier_id, charge_name, freight, charge_category_id)
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM dbo.charge_types ct
-    WHERE ct.charge_name = charge_data.charge_name
-        AND ct.carrier_id = @Carrier_id
-);
+SELECT DISTINCT
+    @Carrier_id AS carrier_id,
+    v.charge_type AS charge_name,
+    CASE WHEN v.charge_type = N'Transportation Cost' THEN 1 ELSE 0 END AS freight,
+    CASE WHEN v.charge_type IN (N'Gst Tax', N'Hst Tax', N'Pst Tax', N'Vat Tax', N'Duties', N'Other Tax')
+         THEN 1 ELSE 0 END AS dt,
+    CASE WHEN v.charge_type = N'Transportation Cost' THEN 15
+         ELSE 11 END AS charge_category_id
+FROM 
+    billing.vw_DHLCharges v
+WHERE 
+    v.file_id = @File_id
+    AND v.charge_type IS NOT NULL
+    AND NOT EXISTS (
+        SELECT 1
+        FROM dbo.charge_types ct
+        WHERE ct.charge_name = v.charge_type
+            AND ct.carrier_id = @Carrier_id
+    );
 */
-    -- Return success with row counts for ADF monitoring
+
     SELECT 
         'SUCCESS' AS Status,
         @ShippingMethodsAdded AS ShippingMethodsAdded;
 
 END TRY
 BEGIN CATCH
-    -- No transaction to rollback - INSERT is independently idempotent
     DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
     DECLARE @ErrorLine INT = ERROR_LINE();
     DECLARE @ErrorNumber INT = ERROR_NUMBER();
@@ -146,6 +141,5 @@ BEGIN CATCH
         @DetailedError AS ErrorMessage,
         @ErrorLine AS ErrorLine;
     
-    -- Re-throw with descriptive message
     THROW 50000, @DetailedError, 1;
 END CATCH;

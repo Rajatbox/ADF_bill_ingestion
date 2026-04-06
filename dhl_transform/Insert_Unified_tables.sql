@@ -19,7 +19,7 @@ ADF Pipeline Variables Required:
 
 Purpose: Two-part idempotent population script (no MPS logic needed for DHL):
          PART 1: INSERT shipment_attributes with tracking number resolution
-         PART 2: INSERT shipment_charges with CROSS APPLY unpivot of 4 charge columns
+         PART 2: INSERT shipment_charges via vw_DHLCharges (38 charge columns)
 
          Tracking Number Resolution (Column 20 logic):
          - recipient_country = 'US' → use domestic_tracking_number
@@ -116,18 +116,13 @@ BEGIN TRY
     ================================================================================
     PART 2: Insert Shipment Charges with FK Reference
     ================================================================================
-    DHL uses wide format with 4 fixed charge columns. CROSS APPLY VALUES unpivots
-    these into individual charge rows:
-      1. Transportation Cost        (dhl.transportation_cost)
-      2. Non-Qualified Dim          (dhl.non_qualified_dimensional_charges)
-      3. Fuel Surcharge             (dhl.fuel_surcharge_amount)
-      4. Delivery Area Surcharge    (dhl.delivery_area_surcharge_amount)
+    Uses vw_DHLCharges to unpivot 38 charge columns into individual charge rows.
+    The view already resolves tracking numbers and filters NULL/zero amounts.
     
     Each charge row links to:
     - charge_types via charge_type_id (looked up by charge_name + carrier_id)
     - shipment_attributes via shipment_attribute_id (looked up by tracking_number)
     
-    Filters: Only inserts non-NULL, non-zero charges.
     Idempotency: NOT EXISTS on (shipment_attribute_id, carrier_bill_id, charge_type_id)
     ================================================================================
     */
@@ -135,39 +130,23 @@ BEGIN TRY
     ;WITH charge_source AS (
         SELECT
             @Carrier_id AS carrier_id,
-            dhl.carrier_bill_id,
-            CASE 
-                WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
-                ELSE dhl.international_tracking_number
-            END AS tracking_number,
+            v.carrier_bill_id,
+            v.tracking_number,
             ct.charge_type_id,
-            CAST(x.amount AS decimal(18,2)) AS amount,
+            v.charge_amount AS amount,
             sa.id AS shipment_attribute_id
         FROM 
-            billing.dhl_bill dhl
-        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = dhl.carrier_bill_id
-        CROSS APPLY (VALUES
-            (N'Transportation Cost',        dhl.transportation_cost),
-            (N'Non-Qualified Dim',          dhl.non_qualified_dimensional_charges),
-            (N'Fuel Surcharge',             dhl.fuel_surcharge_amount),
-            (N'Delivery Area Surcharge',    dhl.delivery_area_surcharge_amount)
-        ) AS x(charge_name, amount)
+            billing.vw_DHLCharges v
         INNER JOIN 
             dbo.charge_types ct
-            ON ct.charge_name = x.charge_name
+            ON ct.charge_name = v.charge_type
             AND ct.carrier_id = @Carrier_id
         INNER JOIN
             billing.shipment_attributes sa
             ON sa.carrier_id = @Carrier_id
-            AND sa.tracking_number = CASE 
-                WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
-                ELSE dhl.international_tracking_number
-            END
+            AND sa.tracking_number = v.tracking_number
         WHERE 
-            cb.file_id = @File_id  -- File-based filtering
-            AND dhl.carrier_bill_id IS NOT NULL
-            AND x.amount IS NOT NULL
-            AND x.amount <> 0
+            v.file_id = @File_id
     )
     INSERT INTO billing.shipment_charges (
         carrier_id,

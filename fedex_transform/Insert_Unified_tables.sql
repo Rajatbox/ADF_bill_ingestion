@@ -48,9 +48,8 @@ Targets:  billing.shipment_attributes (business key: carrier_id + tracking_numbe
 Joins:    dbo.charge_types (charge_type_id lookup)
 View:     billing.vw_shipment_summary (calculated billed_shipping_cost)
 
-Idempotency: - Part 1: NOT EXISTS check + UNIQUE constraint prevents duplicate attributes
+Idempotency: - Part 1: MERGE upserts shipment_attributes (INSERT new, UPDATE existing with COALESCE)
              - Part 2: NOT EXISTS check prevents duplicate charges
-             - Both parts use same pattern: INSERT ... WHERE NOT EXISTS
              - Safe to rerun with same @File_id
 
 Execution Order: FOURTH in pipeline (after Sync_Reference_Data.sql completes).
@@ -69,18 +68,19 @@ BEGIN TRY
 
     /*
     ================================================================================
-    PART 1: INSERT Shipment Attributes with MPS Logic
+    PART 1: MERGE Shipment Attributes with MPS Logic
     ================================================================================
     Four-stage CTE pipeline:
-    1. fx_tallied: Count occurrences of each express_or_ground_tracking_id
+    1. fx_tallied: Count occurrences of each (invoice_number, express_or_ground_tracking_id)
     2. fx_classified: Classify each row into MPS roles
     3. fx_hoisted: Hoist header values to all rows in MPS groups
-    4. fx_final: Apply transformations and filter out MPS_HEADER rows
+    4. fx_final: Merge cross-invoice duplicates (GROUP BY + MAX), convert units, filter MPS_HEADERs
     
-    INSERT Operation: Insert new shipments only (NOT EXISTS prevents duplicates)
-    - UNIQUE constraint on (carrier_id, tracking_number) provides additional safety
-    - Only inserts new tracking numbers (existing ones skipped)
-    - No updates needed (core attributes never change after creation)
+    MERGE Operation: Upsert shipment attributes
+    - NOT MATCHED: Insert new tracking numbers
+    - MATCHED: Update existing rows with COALESCE (correction invoices fill in
+      missing attributes like dims/zone without wiping existing non-null values)
+    - Handles corrections arriving in separate files from the original invoice
     
     Note: billed_shipping_cost is NOT stored in this table. It's calculated on-the-fly
     via vw_shipment_summary view from shipment_charges table (single source of truth).
@@ -91,7 +91,7 @@ BEGIN TRY
         -- Stage 1: Count occurrences to identify MPS groups
         SELECT 
             f.*,
-            COUNT(*) OVER (PARTITION BY f.express_or_ground_tracking_id) as ground_id_count
+            COUNT(*) OVER (PARTITION BY f.invoice_number, f.express_or_ground_tracking_id) as ground_id_count
         FROM billing.fedex_bill f
         JOIN billing.carrier_bill cb ON cb.carrier_bill_id = f.carrier_bill_id
         WHERE cb.file_id = @File_id  -- File-based filtering
@@ -115,38 +115,41 @@ BEGIN TRY
         SELECT 
             COALESCE(NULLIF(msp_tracking_id, ''), express_or_ground_tracking_id) AS tracking_number,
             mps_role,
+            invoice_number,
             express_or_ground_tracking_id as group_id,
             dim_length, dim_width, dim_height, dim_unit,
             rated_weight_units, rated_weight_amount,
             
             -- Hoist net_charge_amount from header/normal row to entire group
             MAX(CASE WHEN mps_role IN ('MPS_HEADER', 'NORMAL_SINGLE') THEN net_charge_amount END) 
-                OVER (PARTITION BY express_or_ground_tracking_id) AS enriched_net_charge,
+                OVER (PARTITION BY invoice_number, express_or_ground_tracking_id) AS enriched_net_charge,
             
             -- Hoist shipment_date from header/normal row to entire group
             MAX(CASE WHEN mps_role IN ('MPS_HEADER', 'NORMAL_SINGLE') THEN shipment_date END) 
-                OVER (PARTITION BY express_or_ground_tracking_id) AS enriched_shipment_date,
+                OVER (PARTITION BY invoice_number, express_or_ground_tracking_id) AS enriched_shipment_date,
             
             -- Hoist service_type from header/normal row to entire group
             MAX(CASE WHEN mps_role IN ('MPS_HEADER', 'NORMAL_SINGLE') THEN service_type END) 
-                OVER (PARTITION BY express_or_ground_tracking_id) AS enriched_service_type,
+                OVER (PARTITION BY invoice_number, express_or_ground_tracking_id) AS enriched_service_type,
             
             -- Hoist zone_code from header/normal row to entire group
             MAX(CASE WHEN mps_role IN ('MPS_HEADER', 'NORMAL_SINGLE') THEN zone_code END) 
-                OVER (PARTITION BY express_or_ground_tracking_id) AS enriched_zone_code
+                OVER (PARTITION BY invoice_number, express_or_ground_tracking_id) AS enriched_zone_code
         FROM fx_classified
     ),
     fx_final AS (
-        -- Stage 4: Apply transformations and prepare for MERGE
+        -- Stage 4: Merge cross-invoice duplicates, convert units, filter MPS_HEADERs
+        -- Same tracking_number can appear in multiple invoices (e.g., original + correction).
+        -- GROUP BY merges them, MAX picks the best non-null value for each attribute.
         SELECT 
             @Carrier_id AS carrier_id,
-            enriched_shipment_date AS shipment_date,
-            enriched_service_type AS shipping_method,
-            enriched_zone_code AS destination_zone,
             tracking_number,
+            MAX(enriched_shipment_date) AS shipment_date,
+            MAX(enriched_service_type) AS shipping_method,
+            MAX(enriched_zone_code) AS destination_zone,
             
             -- Weight conversion: Handle multiple unit variants to OZ
-            CASE 
+            MAX(CASE 
                 WHEN UPPER(rated_weight_units) IN ('L', 'LB', 'LBS', 'P') 
                     THEN rated_weight_amount * 16.0  -- pounds to ounces
                 WHEN UPPER(rated_weight_units) IN ('K', 'KG', 'KGS') 
@@ -154,58 +157,54 @@ BEGIN TRY
                 WHEN rated_weight_units IS NULL 
                     THEN rated_weight_amount  -- unknown/blank -> assume already oz
                 ELSE rated_weight_amount  -- default: assume already oz
-            END AS billed_weight_oz,
+            END) AS billed_weight_oz,
             
             -- Dimension conversions: Handle unit variants to inches
-            CASE 
+            MAX(CASE 
                 WHEN UPPER(dim_unit) = 'C' THEN dim_length / 2.54  -- cm → in
                 WHEN UPPER(dim_unit) = 'I' THEN dim_length  -- already in inches
                 WHEN dim_unit IS NULL THEN dim_length  -- assume already inches
                 ELSE dim_length  -- default: assume already inches
-            END AS billed_length_in,
-            CASE 
+            END) AS billed_length_in,
+            MAX(CASE 
                 WHEN UPPER(dim_unit) = 'C' THEN dim_width / 2.54  -- cm → in
                 WHEN UPPER(dim_unit) = 'I' THEN dim_width  -- already in inches
                 WHEN dim_unit IS NULL THEN dim_width  -- assume already inches
                 ELSE dim_width  -- default: assume already inches
-            END AS billed_width_in,
-            CASE 
+            END) AS billed_width_in,
+            MAX(CASE 
                 WHEN UPPER(dim_unit) = 'C' THEN dim_height / 2.54  -- cm → in
                 WHEN UPPER(dim_unit) = 'I' THEN dim_height  -- already in inches
                 WHEN dim_unit IS NULL THEN dim_height  -- assume already inches
                 ELSE dim_height  -- default: assume already inches
-            END AS billed_height_in
+            END) AS billed_height_in
         FROM fx_hoisted
-        WHERE mps_role <> 'MPS_HEADER'  -- Filter out header rows
+        WHERE mps_role <> 'MPS_HEADER'
+        GROUP BY tracking_number
     )
-    INSERT INTO billing.shipment_attributes (
-        carrier_id,
-        shipment_date,
-        shipping_method,
-        destination_zone,
-        tracking_number,
-        billed_weight_oz,
-        billed_length_in,
-        billed_width_in,
-        billed_height_in
-    )
-    SELECT 
-        carrier_id,
-        shipment_date,
-        shipping_method,
-        destination_zone,
-        tracking_number,
-        billed_weight_oz,
-        billed_length_in,
-        billed_width_in,
-        billed_height_in
-    FROM fx_final
-    WHERE NOT EXISTS (
-        SELECT 1 
-        FROM billing.shipment_attributes sa
-        WHERE sa.carrier_id = fx_final.carrier_id
-          AND sa.tracking_number = fx_final.tracking_number
-    );
+    MERGE billing.shipment_attributes AS target
+    USING fx_final AS source
+    ON target.carrier_id = source.carrier_id
+       AND target.tracking_number = source.tracking_number
+    WHEN MATCHED THEN
+        UPDATE SET
+            shipment_date      = COALESCE(source.shipment_date, target.shipment_date),
+            shipping_method    = COALESCE(source.shipping_method, target.shipping_method),
+            destination_zone   = COALESCE(source.destination_zone, target.destination_zone),
+            billed_weight_oz   = COALESCE(source.billed_weight_oz, target.billed_weight_oz),
+            billed_length_in   = COALESCE(source.billed_length_in, target.billed_length_in),
+            billed_width_in    = COALESCE(source.billed_width_in, target.billed_width_in),
+            billed_height_in   = COALESCE(source.billed_height_in, target.billed_height_in)
+    WHEN NOT MATCHED THEN
+        INSERT (
+            carrier_id, shipment_date, shipping_method, destination_zone,
+            tracking_number, billed_weight_oz, billed_length_in, billed_width_in, billed_height_in
+        )
+        VALUES (
+            source.carrier_id, source.shipment_date, source.shipping_method, source.destination_zone,
+            source.tracking_number, source.billed_weight_oz, source.billed_length_in,
+            source.billed_width_in, source.billed_height_in
+        );
 
     SET @AttributesInserted = @@ROWCOUNT;
 
