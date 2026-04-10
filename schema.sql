@@ -1000,6 +1000,7 @@ CREATE TABLE billing.dhl_bill (
 	xb_customs_surcharge decimal(18,2) NULL,                                                       -- Col 64
 	fuel_surcharge_amount decimal(18,2) NULL,                                                      -- Col 65
 	min_pickup_charge decimal(18,2) NULL,                                                          -- Col 66
+	overlabel_tracking_number nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,             -- Col 67
 	peak_surcharge decimal(18,2) NULL,                                                             -- Col 74
 	broker_fee decimal(18,2) NULL,                                                                 -- Col 75
 	extra_length_surcharge decimal(18,2) NULL,                                                     -- Col 76

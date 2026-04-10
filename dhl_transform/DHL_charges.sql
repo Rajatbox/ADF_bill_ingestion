@@ -12,7 +12,7 @@ Design: Uses OUTER APPLY to unpivot static charge column/amount pairs.
         Unlike FedEx (dynamic charge descriptions from data), DHL has fixed
         columns -- the charge type names here are the single source of truth.
         Joins carrier_bill to expose file_id for file-based filtering.
-        Includes resolved tracking number (domestic/international via country).
+        Includes resolved tracking number (overlabel-preferred, then Column 20 fallback).
         
 Output: One row per charge per tracking number (narrow format)
 ================================================================================
@@ -23,7 +23,10 @@ SELECT
     dhl.carrier_bill_id,
     dhl.invoice_number,
     CASE 
-        WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
+        WHEN NULLIF(TRIM(dhl.overlabel_tracking_number), '') IS NOT NULL
+            THEN dhl.overlabel_tracking_number
+        WHEN UPPER(TRIM(dhl.recipient_country)) = 'US'
+            THEN dhl.domestic_tracking_number
         ELSE dhl.international_tracking_number
     END AS tracking_number,
     dhl.created_date,

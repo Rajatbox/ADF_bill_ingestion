@@ -14,7 +14,8 @@
 
 - **International**: Column 12 (`customer_confirm`) used as-is
 - **Domestic**: `'420' + LEFT(zip, 5) + Column 13 (delivery_confirm)`
-- **Resolution**: `recipient_country = 'US'` → domestic; otherwise → international
+- **Overlabel**: `'420' + LEFT(zip, 5) + Column 67 (overlabeled_value)` — alternate tracking used by WMS for last-mile
+- **Resolution**: overlabel wins when present; else `recipient_country = 'US'` → domestic; otherwise → international
 
 ## Two-Layer Naming Convention
 
@@ -100,7 +101,7 @@ Must equal Cell L1 from the HDR row.
 | 64    | BL    | xb_customs_surcharge         | Prop_64                                    | xb_customs_surcharge                      |
 | 65    | BM    | surcharge_fuel               | fuel_surcharge_amount                      | fuel_surcharge_amount                     |
 | 66    | BN    | min_pickup_charge            | Prop_66                                    | min_pickup_charge                         |
-| 67    | BO    | overlabeled_value            | overlabel_tracking_number                  | -                                         |
+| 67    | BO    | overlabeled_value            | overlabel_tracking_number                  | overlabel_tracking_number                 |
 | 68    | BP    | dim_weight                   | Prop_68                                    | -                                         |
 | 69    | BQ    | uom_dim_weight               | Prop_69                                    | -                                         |
 | 70    | BR    | dim_length                   | Prop_70                                    | -                                         |

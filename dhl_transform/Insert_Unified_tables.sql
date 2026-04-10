@@ -21,7 +21,8 @@ Purpose: Two-part idempotent population script (no MPS logic needed for DHL):
          PART 1: INSERT shipment_attributes with tracking number resolution
          PART 2: INSERT shipment_charges via vw_DHLCharges (38 charge columns)
 
-         Tracking Number Resolution (Column 20 logic):
+         Tracking Number Resolution (overlabel-preferred, then Column 20 fallback):
+         - overlabel_tracking_number is non-empty → use overlabel_tracking_number
          - recipient_country = 'US' → use domestic_tracking_number
          - recipient_country != 'US' → use international_tracking_number
 
@@ -55,7 +56,8 @@ BEGIN TRY
     ================================================================================
     Each dhl_bill row = one unique shipment.
     
-    Tracking number resolution (Column 20 logic):
+    Tracking number resolution (overlabel-preferred, then Column 20 fallback):
+      - overlabel_tracking_number is non-empty → overlabel_tracking_number
       - recipient_country = 'US' → domestic_tracking_number
       - recipient_country != 'US' → international_tracking_number
     
@@ -76,13 +78,7 @@ BEGIN TRY
         dhl.shipping_date,
         dhl.shipping_method,
         dhl.[zone] AS destination_zone,
-        -- Column 20 logic: recipient_country determines which tracking number to use
-        CASE 
-            WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
-            ELSE dhl.international_tracking_number
-        END AS tracking_number,
-        
-        -- Weight conversion: billed_weight → ounces (OZ)
+        trk.resolved_tracking_number,
         CASE 
             WHEN UPPER(dhl.billed_weight_unit) IN ('LB', 'LBS') 
                 THEN dhl.billed_weight * 16.0          -- pounds to ounces
@@ -94,20 +90,25 @@ BEGIN TRY
         END AS billed_weight_oz
     FROM billing.dhl_bill dhl
     JOIN billing.carrier_bill cb ON cb.carrier_bill_id = dhl.carrier_bill_id
-    WHERE cb.file_id = @File_id  -- File-based filtering
+    CROSS APPLY (
+        VALUES (
+            CASE 
+                WHEN NULLIF(TRIM(dhl.overlabel_tracking_number), '') IS NOT NULL
+                    THEN dhl.overlabel_tracking_number
+                WHEN UPPER(TRIM(dhl.recipient_country)) = 'US'
+                    THEN dhl.domestic_tracking_number
+                ELSE dhl.international_tracking_number
+            END
+        )
+    ) trk (resolved_tracking_number)
+    WHERE cb.file_id = @File_id
       AND dhl.carrier_bill_id IS NOT NULL
-      AND CASE 
-              WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
-              ELSE dhl.international_tracking_number
-          END IS NOT NULL
+      AND trk.resolved_tracking_number IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 
           FROM billing.shipment_attributes sa
           WHERE sa.carrier_id = @Carrier_id
-            AND sa.tracking_number = CASE 
-                WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
-                ELSE dhl.international_tracking_number
-            END
+            AND sa.tracking_number = trk.resolved_tracking_number
       );
 
     SET @AttributesInserted = @@ROWCOUNT;

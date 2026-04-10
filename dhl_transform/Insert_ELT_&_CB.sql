@@ -32,11 +32,13 @@ Bronze-to-Silver Mapping (this script):
   delta_dhl_bill.surcharge_fuel      -> dhl_bill.fuel_surcharge_amount
   delta_dhl_bill.delivery_area_surcharge -> dhl_bill.delivery_area_surcharge_amount
   delta_dhl_bill.dangerous_goods_charge  -> dhl_bill.dangerous_goods_charge
+  delta_dhl_bill.overlabeled_value      -> dhl_bill.overlabel_tracking_number
   (34 new charge columns keep same name in both layers)
 
 Tracking Number Logic (applied in Step 2):
   - international_tracking_number: customer_confirm (Col 12) saved as-is
   - domestic_tracking_number:      '420' + LEFT(zip, 5) + delivery_confirm (Col 13)
+  - overlabel_tracking_number:     '420' + LEFT(zip, 5) + overlabeled_value (Col 67)
 
 Carrier Bill Total: SUM of all 38 charge columns from delta.
                     Computed from DTL rows (no HDR row in delta table).
@@ -205,6 +207,7 @@ BEGIN TRY
         xb_customs_surcharge,
         fuel_surcharge_amount,
         min_pickup_charge,
+        overlabel_tracking_number,
         peak_surcharge,
         broker_fee,
         extra_length_surcharge,
@@ -261,6 +264,10 @@ BEGIN TRY
         CAST(NULLIF(TRIM(d.xb_customs_surcharge), '') AS decimal(18,2)),
         CAST(NULLIF(TRIM(d.surcharge_fuel), '') AS decimal(18,2)),
         CAST(NULLIF(TRIM(d.min_pickup_charge), '') AS decimal(18,2)),
+        CASE WHEN NULLIF(TRIM(CAST(d.overlabeled_value AS varchar(255))), '') IS NOT NULL
+             THEN '420' + LEFT(REPLACE(CAST(d.recipient_zip AS varchar(50)), ' ', ''), 5)
+                        + TRIM(CAST(d.overlabeled_value AS varchar(255)))
+        END AS overlabel_tracking_number,
         CAST(NULLIF(TRIM(d.peak_surcharge), '') AS decimal(18,2)),
         CAST(NULLIF(TRIM(d.broker_fee), '') AS decimal(18,2)),
         CAST(NULLIF(TRIM(d.extra_length_surcharge), '') AS decimal(18,2)),
