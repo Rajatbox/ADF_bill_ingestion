@@ -197,10 +197,12 @@ BEGIN TRY
     ================================================================================
     Ensures all shipping methods have a default markup entry in global_carrier_markups.
     Uses the latest active default markup from default_markups table.
+    Assigns rule_id from dbo.seq_rule_id (one NEXT VALUE per new row).
     Idempotent: Uses NOT EXISTS to prevent duplicates.
     ================================================================================
     */
     INSERT INTO dbo.global_carrier_markups (
+        rule_id,
         carrier_id,
         shipping_method_id,
         markup,
@@ -208,6 +210,7 @@ BEGIN TRY
         integrated_carrier_id
     )
     SELECT
+        NEXT VALUE FOR dbo.seq_rule_id AS rule_id,
         sm.carrier_id,
         sm.shipping_method_id,
         dm.markup,
