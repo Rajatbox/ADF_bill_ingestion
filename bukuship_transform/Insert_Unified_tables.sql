@@ -7,6 +7,7 @@ Note: Database name is parameterized via ADF Linked Service per environment.
 ADF Pipeline Variables Required:
   INPUT:
     - @Carrier_id: INT - Carrier identifier from parent pipeline
+                        (Bukuship the aggregator carrier)
     - @File_id: INT - File tracking ID from parent pipeline
 
   OUTPUT (Query Results):
@@ -19,12 +20,19 @@ ADF Pipeline Variables Required:
 
 Purpose: Two-part idempotent population script:
          PART 1: INSERT shipment_attributes (one row per tracking number)
-                 Source row = the "Freight Charge" row for that tracking number,
-                 which carries the canonical weight, service, and zone.
+                 Source row = the row where charge_type = 'Freight Charge'
+                 (carries canonical weight, service, and zone).
                  Accessorial-only tracking numbers (no Freight Charge row)
-                 are also captured using any available row as fallback.
+                 are captured using any available row as fallback.
          PART 2: INSERT shipment_charges (one row per charge row in bukuship_bill)
                  Narrow format — each bukuship_bill row is already one charge.
+
+Carrier Model:
+         Bukuship is the aggregator (is_aggregator = 1 in dbo.carrier).
+         Each shipment row carries a carrier_name identifying the integrated
+         carrier that physically fulfilled the shipment:
+           - "Landmark Global"  → fulfilled directly by Landmark Global
+           - "DHL eCommerce"    → fulfilled by DHL eCommerce via Bukuship
 
 Tracking Number:
          - Landmark Global rows: tracking_number column (stored in bukuship_bill)
@@ -37,8 +45,8 @@ Unit Conversions (Design Constraint #7):
          - Dimensions (Length/Width/Height): already NULL when 0; no unit column
            present so stored as-is (data observed in IN based on DimDivisor=139)
 
-Integrated Carrier: resolved from CarrierName via dbo.carrier lookup, passed to
-         shipment_attributes.integrated_carrier_id and shipping_method join.
+Integrated Carrier: resolved from bukuship_bill.carrier_name via dbo.carrier lookup,
+         stored in shipment_attributes.integrated_carrier_id.
 
 Sources:  billing.bukuship_bill + carrier_bill JOIN (file_id filtered)
 Targets:  billing.shipment_attributes (business key: carrier_id + tracking_number)
@@ -72,8 +80,8 @@ BEGIN TRY
       CASE charge_type WHEN 'Freight Charge' THEN 0 ELSE 1 END, carrier_bill_id).
 
     Weight conversion to OZ:
-      BilledWeight + BilledWeightUnits columns used (represents what was actually billed).
-      PackageWeight is the physical scan weight; BilledWeight accounts for dim billing.
+      billed_weight + billed_weight_units columns used (represents what was billed).
+      package_weight is the physical scan weight; billed_weight accounts for dim billing.
 
     Dimensions:
       Already stored as NULL when 0 in bukuship_bill (handled in Insert_ELT_&_CB.sql).
@@ -95,48 +103,48 @@ BEGIN TRY
     )
     SELECT
         @Carrier_id                                AS carrier_id,
-        NULLIF(TRIM(l.ship_date), '')              AS shipment_date,
-        l.service_name                             AS shipping_method,
-        NULLIF(TRIM(l.zone), '')                   AS destination_zone,
-        l.tracking_number,
+        NULLIF(TRIM(bb.ship_date), '')             AS shipment_date,
+        bb.service_name                            AS shipping_method,
+        NULLIF(TRIM(bb.zone), '')                  AS destination_zone,
+        bb.tracking_number,
 
         -- Weight → OZ (Design Constraint #7)
         CASE
-            WHEN UPPER(l.billed_weight_units) = 'OZ' THEN l.billed_weight
-            WHEN UPPER(l.billed_weight_units) = 'LB' THEN l.billed_weight * 16
-            WHEN UPPER(l.billed_weight_units) = 'KG' THEN l.billed_weight * 35.274
-            ELSE l.billed_weight
+            WHEN UPPER(bb.billed_weight_units) = 'OZ' THEN bb.billed_weight
+            WHEN UPPER(bb.billed_weight_units) = 'LB' THEN bb.billed_weight * 16
+            WHEN UPPER(bb.billed_weight_units) = 'KG' THEN bb.billed_weight * 35.274
+            ELSE bb.billed_weight
         END                                        AS billed_weight_oz,
 
         -- Dimensions already in IN (NULL when 0, set in Insert_ELT_&_CB.sql)
-        l.length                                   AS billed_length_in,
-        l.width                                    AS billed_width_in,
-        l.height                                   AS billed_height_in,
+        bb.length                                  AS billed_length_in,
+        bb.width                                   AS billed_width_in,
+        bb.height                                  AS billed_height_in,
 
         c.carrier_id                               AS integrated_carrier_id
 
     FROM (
         SELECT
-            l.*,
+            bb.*,
             ROW_NUMBER() OVER (
-                PARTITION BY l.tracking_number
+                PARTITION BY bb.tracking_number
                 ORDER BY
-                    CASE WHEN LOWER(l.charge_type) = 'freight charge' THEN 0 ELSE 1 END,
-                    l.carrier_bill_id
+                    CASE WHEN LOWER(bb.charge_type) = 'freight charge' THEN 0 ELSE 1 END,
+                    bb.carrier_bill_id
             ) AS rn
-        FROM billing.bukuship_bill l
-        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = l.carrier_bill_id
+        FROM billing.bukuship_bill bb
+        JOIN billing.carrier_bill cb ON cb.carrier_bill_id = bb.carrier_bill_id
         WHERE cb.file_id = @File_id
-          AND NULLIF(TRIM(l.tracking_number), '') IS NOT NULL
-    ) l
+          AND NULLIF(TRIM(bb.tracking_number), '') IS NOT NULL
+    ) bb
     LEFT JOIN dbo.carrier c
-        ON LOWER(c.carrier_name) = LOWER(l.carrier_name)
-    WHERE l.rn = 1
+        ON LOWER(c.carrier_name) = LOWER(bb.carrier_name)
+    WHERE bb.rn = 1
       AND NOT EXISTS (
             SELECT 1
             FROM billing.shipment_attributes sa
             WHERE sa.carrier_id      = @Carrier_id
-              AND sa.tracking_number = l.tracking_number
+              AND sa.tracking_number = bb.tracking_number
       );
 
     SET @AttributesInserted = @@ROWCOUNT;
@@ -166,29 +174,29 @@ BEGIN TRY
     )
     SELECT
         @Carrier_id           AS carrier_id,
-        l.carrier_bill_id,
-        l.tracking_number,
+        bb.carrier_bill_id,
+        bb.tracking_number,
         ct.charge_type_id,
-        l.net_cost            AS amount,
+        bb.net_cost           AS amount,
         sa.id                 AS shipment_attribute_id
-    FROM billing.bukuship_bill l
+    FROM billing.bukuship_bill bb
     JOIN billing.carrier_bill cb
-        ON cb.carrier_bill_id = l.carrier_bill_id
+        ON cb.carrier_bill_id = bb.carrier_bill_id
     INNER JOIN dbo.charge_types ct
-        ON ct.charge_name  = l.charge_name
+        ON ct.charge_name  = bb.charge_name
         AND ct.carrier_id  = @Carrier_id
     INNER JOIN billing.shipment_attributes sa
-        ON sa.tracking_number = l.tracking_number
+        ON sa.tracking_number = bb.tracking_number
         AND sa.carrier_id     = @Carrier_id
     WHERE cb.file_id = @File_id
-      AND NULLIF(TRIM(l.tracking_number), '') IS NOT NULL
-      AND l.net_cost IS NOT NULL
-      AND l.net_cost <> 0
+      AND NULLIF(TRIM(bb.tracking_number), '') IS NOT NULL
+      AND bb.net_cost IS NOT NULL
+      AND bb.net_cost <> 0
       AND NOT EXISTS (
             SELECT 1
             FROM billing.shipment_charges sc
-            WHERE sc.carrier_bill_id  = l.carrier_bill_id
-              AND sc.tracking_number  = l.tracking_number
+            WHERE sc.carrier_bill_id  = bb.carrier_bill_id
+              AND sc.tracking_number  = bb.tracking_number
               AND sc.charge_type_id   = ct.charge_type_id
       );
 
@@ -233,6 +241,7 @@ Design Constraints Applied
 ✅ #10 - Narrow format: one bukuship_bill row = one charge, no unpivot needed
 ✅ #11 - charge_category_id = 11 (Other) for all charges
 ✅ #12 - Joins carrier_bill and filters by @File_id in both parts
-Aggregator rule: integrated_carrier_id resolved via CarrierName → dbo.carrier
+Aggregator rule: Bukuship is the aggregator (@Carrier_id); integrated_carrier_id
+                 resolved from carrier_name (Landmark Global / DHL eCommerce) → dbo.carrier
 ================================================================================
 */

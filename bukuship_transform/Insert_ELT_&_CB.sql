@@ -28,7 +28,7 @@ Tracking Number Logic:
          - DHL eCommerce rows: Constructed as '420' + ReceiverZipCode + WaybillNumber
            (CASE on CarrierName to select correct tracking identifier)
 
-Dimensions: 0 or NULL values are treated as NULL (NULLIF + zero check applied)
+Dimensions: NULL only when empty/missing, explicit zeros are preserved
 
 Source:   billing.delta_bukuship_bill
 Targets:  billing.carrier_bill (invoice summaries)
@@ -106,7 +106,7 @@ BEGIN TRY
       - DHL eCommerce: '420' + ReceiverZipCode + WaybillNumber
       - All others (Landmark Global etc.): TrackingNumber column
 
-    Dimensions stored as NULL when 0 or empty (NULLIF + zero check).
+    Dimensions stored as NULL only when empty (NULLIF only, explicit zeros preserved).
 
     Join to carrier_bill on AccountNumber + InvoiceDate + carrier_id to
     resolve carrier_bill_id. NOT EXISTS checks carrier_bill_id only
@@ -203,29 +203,24 @@ BEGIN TRY
         CAST(d.NetCost AS DECIMAL(18,2)),
 
         CASE WHEN NULLIF(TRIM(d.PackageWeight), '') IS NOT NULL
-                  AND CAST(d.PackageWeight AS DECIMAL(18,6)) <> 0
              THEN CAST(d.PackageWeight AS DECIMAL(18,6))
              ELSE NULL
         END,
         NULLIF(TRIM(d.PackageWeightUnit), ''),
 
         CASE WHEN NULLIF(TRIM(d.BilledWeight), '') IS NOT NULL
-                  AND CAST(d.BilledWeight AS DECIMAL(18,6)) <> 0
              THEN CAST(d.BilledWeight AS DECIMAL(18,6))
              ELSE NULL
         END,
         NULLIF(TRIM(d.BilledWeightUnits), ''),
         NULLIF(TRIM(d.WeightBreak), ''),
 
-        -- Dimensions: NULL when 0 or empty
+        -- Dimensions: NULL only when empty string, preserve explicit zeros
         CASE WHEN NULLIF(TRIM(d.Length), '') IS NOT NULL
-                  AND CAST(d.Length AS DECIMAL(18,2)) <> 0
              THEN CAST(d.Length AS DECIMAL(18,2)) ELSE NULL END,
         CASE WHEN NULLIF(TRIM(d.Width), '') IS NOT NULL
-                  AND CAST(d.Width AS DECIMAL(18,2)) <> 0
              THEN CAST(d.Width AS DECIMAL(18,2)) ELSE NULL END,
         CASE WHEN NULLIF(TRIM(d.Height), '') IS NOT NULL
-                  AND CAST(d.Height AS DECIMAL(18,2)) <> 0
              THEN CAST(d.Height AS DECIMAL(18,2)) ELSE NULL END,
 
         NULLIF(TRIM(d.DimDivisor), ''),
@@ -263,7 +258,6 @@ BEGIN TRY
         NULLIF(TRIM(d.Reference3), ''),
 
         CASE WHEN NULLIF(TRIM(d.CustomsValue), '') IS NOT NULL
-                  AND CAST(d.CustomsValue AS DECIMAL(18,2)) <> 0
              THEN CAST(d.CustomsValue AS DECIMAL(18,2)) ELSE NULL END,
         NULLIF(TRIM(d.CustomsValueCurrencyCode), ''),
         NULLIF(TRIM(d.DeliveryConfirmation), ''),
@@ -271,13 +265,10 @@ BEGIN TRY
         NULLIF(TRIM(d.Packaging), ''),
 
         CASE WHEN NULLIF(TRIM(d.EnteredLength), '') IS NOT NULL
-                  AND CAST(d.EnteredLength AS DECIMAL(18,2)) <> 0
              THEN CAST(d.EnteredLength AS DECIMAL(18,2)) ELSE NULL END,
         CASE WHEN NULLIF(TRIM(d.EnteredWidth), '') IS NOT NULL
-                  AND CAST(d.EnteredWidth AS DECIMAL(18,2)) <> 0
              THEN CAST(d.EnteredWidth AS DECIMAL(18,2)) ELSE NULL END,
         CASE WHEN NULLIF(TRIM(d.EnteredHeight), '') IS NOT NULL
-                  AND CAST(d.EnteredHeight AS DECIMAL(18,2)) <> 0
              THEN CAST(d.EnteredHeight AS DECIMAL(18,2)) ELSE NULL END
 
     FROM billing.delta_bukuship_bill d

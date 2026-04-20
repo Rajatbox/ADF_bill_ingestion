@@ -734,9 +734,9 @@ CREATE TABLE billing.delta_passport_bill (
 );
 
 
--- LANDMARK DELTA TABLE
+-- BUKUSHIP DELTA TABLE
 
-CREATE TABLE billing.delta_landmark_bill (
+CREATE TABLE billing.delta_bukuship_bill (
     CompanyName                 VARCHAR(255) NULL,
     CarrierName                 VARCHAR(255) NULL,
     AccountNumber               VARCHAR(255) NULL,
@@ -1186,9 +1186,9 @@ CREATE NONCLUSTERED INDEX IX_flavorcloud_bill_tracking_number_invoice
 ON billing.flavorcloud_bill (tracking_number, invoice_number, invoice_date);
 
 
--- LANDMARK BILL TABLE
+-- Bukuship BILL TABLE
 
-CREATE TABLE billing.landmark_bill (
+CREATE TABLE billing.bukuship_bill (
     id                          INT IDENTITY(1,1) NOT NULL,
     carrier_bill_id             INT              NULL,
 
@@ -1277,18 +1277,18 @@ CREATE TABLE billing.landmark_bill (
 
     created_date                DATETIME2        DEFAULT SYSDATETIME() NOT NULL,
 
-    CONSTRAINT PK_landmark_bill PRIMARY KEY (id),
-    CONSTRAINT FK_landmark_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+    CONSTRAINT PK_bukuship_bill PRIMARY KEY (id),
+    CONSTRAINT FK_bukuship_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
         REFERENCES billing.carrier_bill(carrier_bill_id)
 );
 
 -- FK lookup performance
-CREATE NONCLUSTERED INDEX IX_landmark_bill_carrier_bill_id
-ON billing.landmark_bill (carrier_bill_id);
+CREATE NONCLUSTERED INDEX IX_bukuship_bill_carrier_bill_id
+ON billing.bukuship_bill (carrier_bill_id);
 
 -- Tracking number lookups (used by Insert_Unified_tables.sql)
-CREATE NONCLUSTERED INDEX IX_landmark_bill_tracking_number
-ON billing.landmark_bill (tracking_number, carrier_bill_id);
+CREATE NONCLUSTERED INDEX IX_bukuship_bill_tracking_number
+ON billing.bukuship_bill (tracking_number, carrier_bill_id);
 
 
 -- PASSPORT BILL TABLE
@@ -1385,7 +1385,7 @@ Seed / migration INSERT for Bukuship (run once per environment):
   WHERE NOT EXISTS (SELECT 1 FROM dbo.carrier WHERE LOWER(carrier_name) = 'bukuship');
 
   Bukuship routes through DHL eCommerce and Landmark Global as integrated carriers.
-  Both are auto-discovered from CarrierName in billing.landmark_bill via
+  Both are auto-discovered from CarrierName in billing.bukuship_bill via
   Sync_Reference_Data.sql Block 0 (INSERT-IF-NOT-EXISTS, is_aggregator = 0).
 */
 
