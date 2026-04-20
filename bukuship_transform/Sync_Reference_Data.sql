@@ -27,7 +27,7 @@ Purpose: Automatically populate and maintain reference/lookup tables by
                   (carrier_id, method_name, integrated_carrier_id)
          Block 2: Sync charge types from ChargeName column
 
-Source:  billing.landmark_bill + carrier_bill JOIN (file_id filtered)
+Source:  billing.bukuship_bill + carrier_bill JOIN (file_id filtered)
 Targets: dbo.carrier (integrated carriers)
          dbo.shipping_method (service methods per integrated carrier)
          dbo.charge_types (charge names per carrier)
@@ -65,7 +65,7 @@ BEGIN TRY
         l.carrier_name,
         1 AS is_active,
         0 AS is_aggregator
-    FROM billing.landmark_bill l
+    FROM billing.bukuship_bill l
     JOIN billing.carrier_bill cb ON cb.carrier_bill_id = l.carrier_bill_id
     WHERE cb.file_id = @File_id
       AND NULLIF(TRIM(l.carrier_name), '') IS NOT NULL
@@ -81,7 +81,7 @@ BEGIN TRY
     ================================================================================
     Block 1: Synchronize Shipping Methods
     ================================================================================
-    Discovers distinct (ServiceName, CarrierName) combinations from landmark_bill
+    Discovers distinct (ServiceName, CarrierName) combinations from bukuship_bill
     and inserts new entries into dbo.shipping_method.
 
     Key:  (carrier_id = Landmark carrier_id, method_name = ServiceName,
@@ -107,7 +107,7 @@ BEGIN TRY
         0                          AS guaranteed_delivery,
         1                          AS is_active,
         c.carrier_id               AS integrated_carrier_id
-    FROM billing.landmark_bill l
+    FROM billing.bukuship_bill l
     JOIN billing.carrier_bill cb ON cb.carrier_bill_id = l.carrier_bill_id
     LEFT JOIN dbo.carrier c
         ON LOWER(c.carrier_name) = LOWER(l.carrier_name)
@@ -130,7 +130,7 @@ BEGIN TRY
     ================================================================================
     Block 2: Synchronize Charge Types
     ================================================================================
-    Discovers distinct ChargeName values from landmark_bill and inserts new entries
+    Discovers distinct ChargeName values from bukuship_bill and inserts new entries
     into dbo.charge_types.
 
     ChargeName examples: "Freight Charge", "Fuel Surcharge", "Fuel", "Broker Fee"
@@ -154,7 +154,7 @@ BEGIN TRY
             ELSE 0
         END AS is_freight,
         11  AS charge_category_id   -- All charges = Other
-    FROM billing.landmark_bill l
+    FROM billing.bukuship_bill l
     JOIN billing.carrier_bill cb ON cb.carrier_bill_id = l.carrier_bill_id
     WHERE cb.file_id = @File_id
       AND NULLIF(TRIM(l.charge_name), '') IS NOT NULL
@@ -180,7 +180,7 @@ BEGIN CATCH
     DECLARE @ErrorNumber  INT            = ERROR_NUMBER();
 
     DECLARE @DetailedError NVARCHAR(4000) =
-        '[Landmark] Sync_Reference_Data.sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) +
+        '[Bukuship] Sync_Reference_Data.sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) +
         ' (Error ' + CAST(@ErrorNumber AS NVARCHAR(10)) + '): ' + @ErrorMessage;
 
     SELECT

@@ -23,13 +23,13 @@ Purpose: Two-part idempotent population script:
                  which carries the canonical weight, service, and zone.
                  Accessorial-only tracking numbers (no Freight Charge row)
                  are also captured using any available row as fallback.
-         PART 2: INSERT shipment_charges (one row per charge row in landmark_bill)
-                 Narrow format — each landmark_bill row is already one charge.
+         PART 2: INSERT shipment_charges (one row per charge row in bukuship_bill)
+                 Narrow format — each bukuship_bill row is already one charge.
 
 Tracking Number:
-         - Landmark Global rows: tracking_number column (stored in landmark_bill)
+         - Landmark Global rows: tracking_number column (stored in bukuship_bill)
          - DHL eCommerce rows: '420' + ReceiverZipCode + WaybillNumber
-           (already resolved and stored in landmark_bill.tracking_number by
+           (already resolved and stored in bukuship_bill.tracking_number by
             Insert_ELT_&_CB.sql)
 
 Unit Conversions (Design Constraint #7):
@@ -40,7 +40,7 @@ Unit Conversions (Design Constraint #7):
 Integrated Carrier: resolved from CarrierName via dbo.carrier lookup, passed to
          shipment_attributes.integrated_carrier_id and shipping_method join.
 
-Sources:  billing.landmark_bill + carrier_bill JOIN (file_id filtered)
+Sources:  billing.bukuship_bill + carrier_bill JOIN (file_id filtered)
 Targets:  billing.shipment_attributes (business key: carrier_id + tracking_number)
           billing.shipment_charges (with shipment_attribute_id FK)
 Joins:    dbo.charge_types, dbo.shipping_method, dbo.carrier
@@ -60,7 +60,7 @@ BEGIN TRY
     ================================================================================
     PART 1: INSERT Shipment Attributes
     ================================================================================
-    One row per distinct tracking_number from landmark_bill.
+    One row per distinct tracking_number from bukuship_bill.
 
     Canonical source row selection:
       - Prefer the row where charge_type = 'Freight Charge' (carries shipment weight,
@@ -76,7 +76,7 @@ BEGIN TRY
       PackageWeight is the physical scan weight; BilledWeight accounts for dim billing.
 
     Dimensions:
-      Already stored as NULL when 0 in landmark_bill (handled in Insert_ELT_&_CB.sql).
+      Already stored as NULL when 0 in bukuship_bill (handled in Insert_ELT_&_CB.sql).
       DimDivisor = 139 confirms inches. Stored as-is (no unit conversion needed).
     ================================================================================
     */
@@ -124,7 +124,7 @@ BEGIN TRY
                     CASE WHEN LOWER(l.charge_type) = 'freight charge' THEN 0 ELSE 1 END,
                     l.carrier_bill_id
             ) AS rn
-        FROM billing.landmark_bill l
+        FROM billing.bukuship_bill l
         JOIN billing.carrier_bill cb ON cb.carrier_bill_id = l.carrier_bill_id
         WHERE cb.file_id = @File_id
           AND NULLIF(TRIM(l.tracking_number), '') IS NOT NULL
@@ -145,7 +145,7 @@ BEGIN TRY
     ================================================================================
     PART 2: INSERT Shipment Charges
     ================================================================================
-    One row per landmark_bill charge row (already narrow — each row = one charge).
+    One row per bukuship_bill charge row (already narrow — each row = one charge).
 
     charge_type_id: looked up from dbo.charge_types by (carrier_id, charge_name)
     shipment_attribute_id: looked up from shipment_attributes by (carrier_id, tracking_number)
@@ -171,7 +171,7 @@ BEGIN TRY
         ct.charge_type_id,
         l.net_cost            AS amount,
         sa.id                 AS shipment_attribute_id
-    FROM billing.landmark_bill l
+    FROM billing.bukuship_bill l
     JOIN billing.carrier_bill cb
         ON cb.carrier_bill_id = l.carrier_bill_id
     INNER JOIN dbo.charge_types ct
@@ -206,7 +206,7 @@ BEGIN CATCH
     DECLARE @ErrorNumber  INT            = ERROR_NUMBER();
 
     DECLARE @DetailedError NVARCHAR(4000) =
-        '[Landmark] Insert_Unified_tables.sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) +
+        '[Bukuship] Insert_Unified_tables.sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) +
         ' (Error ' + CAST(@ErrorNumber AS NVARCHAR(10)) + '): ' + @ErrorMessage;
 
     SELECT
@@ -230,7 +230,7 @@ Design Constraints Applied
 ✅ #7  - BilledWeight converted to OZ (OZ→OZ, LB×16, KG×35.274)
          Dimensions stored as NULL when 0; in inches (DimDivisor=139 confirms IN)
 ✅ #8  - Returns Status, AttributesInserted, ChargesInserted
-✅ #10 - Narrow format: one landmark_bill row = one charge, no unpivot needed
+✅ #10 - Narrow format: one bukuship_bill row = one charge, no unpivot needed
 ✅ #11 - charge_category_id = 11 (Other) for all charges
 ✅ #12 - Joins carrier_bill and filters by @File_id in both parts
 Aggregator rule: integrated_carrier_id resolved via CarrierName → dbo.carrier

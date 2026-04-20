@@ -61,6 +61,9 @@ The Carrier table stores both aggregators and traditional carriers, with a flag 
 | 6          | Passport     | Yes       | No            |
 | 7          | EasyPost     | Yes       | **Yes**       |
 | 8          | FlavorCloud  | Yes       | **Yes**       |
+| 9          | Bukuship        | Yes       | **Yes**       |
+| 10         | DHL eCommerce   | Yes       | No            |
+| 11         | Landmark Global | Yes       | No            |
 
 **Auto-Discovery:** Aggregator billing data may reference carrier names not yet in this table (e.g., a new last-mile carrier). Each aggregator's `Sync_Reference_Data.sql` runs a Block 0 INSERT-IF-NOT-EXISTS that discovers unknown `integrated_carrier` values from billing data and inserts them with `is_aggregator = 0`, `is_active = 1` before the shipping method sync executes. This ensures the downstream `integrated_carrier_id` FK resolves correctly without manual seeding.
 
@@ -341,6 +344,58 @@ SUM(Shipping Charges + Commissions + LandedCost + Insurance) = Shipment Total Ch
 3. Zero-amount charges excluded from shipment_charges
 4. LandedCost stored as a single charge (not split into Duties/Taxes/Fees)
 5. New service levels auto-discovered from data
+
+---
+
+## Bukuship
+
+### Overview
+Bukuship is an aggregator that routes shipments through two integrated carriers: **DHL eCommerce** and **Landmark Global**. Data is exported as a CSV with one row per charge (narrow format — no unpivoting needed).
+
+### Invoice Information
+- **Invoice Number**: `AccountNumber` column (e.g., `5125786`, `L2289A`)
+- **Invoice Date**: `InvoiceDate` column (`yyyy-MM-dd`)
+- **Invoice Grouping**: One `carrier_bill` row per `(AccountNumber, InvoiceDate)` — a single file may contain multiple accounts
+
+### Integrated Carriers & Tracking Number Logic
+
+| Integrated Carrier | Identified By              | tracking_number Formula                       |
+|--------------------|----------------------------|-----------------------------------------------|
+| DHL eCommerce      | `CarrierName LIKE '%dhl%'` | `'420' + ReceiverZipCode + WaybillNumber`     |
+| Landmark Global    | All other rows             | `TrackingNumber` column as-is                 |
+
+DHL rows missing `WaybillNumber` or `ReceiverZipCode` are excluded from `bukuship_bill`.
+
+### Charge Structure
+**Format:** Narrow (one row per charge; new charge names auto-discovered per file)
+
+| Charge Name    | Freight Flag |
+|----------------|-------------|
+| Freight Charge | freight=1   |
+| Broker Fee     | freight=0   |
+| Disbursement   | freight=0   |
+| Fuel           | freight=0   |
+| Fuel Surcharge | freight=0   |
+| GST Tax        | freight=0   |
+| HST Tax        | freight=0   |
+| Minimum Pickup | freight=0   |
+
+**Category:** All charges → `'Other'` (charge_category_id = 11)
+
+### Unit Conversions
+- **Weight:** OZ → OZ (DHL eCommerce), LB → OZ ×16 (Landmark Global), KG → OZ ×35.274 (fallback)
+- **Dimensions:** Already in IN (`DimDivisor = 139` confirms inches); stored as NULL when 0
+
+### Schema
+- **Delta table:** `billing.delta_bukuship_bill` (all columns VARCHAR)
+- **Normalized table:** `billing.bukuship_bill` (typed, one row per charge)
+
+### Key Business Rules
+1. A single file may span multiple accounts — each `(AccountNumber, InvoiceDate)` becomes its own `carrier_bill` row
+2. DHL tracking key requires both `WaybillNumber` and `ReceiverZipCode` — rows missing either are excluded
+3. Canonical row for `shipment_attributes` is the `Freight Charge` row; accessorial-only tracking numbers fall back to any row
+4. Zero-amount charges excluded from `shipment_charges`
+5. Integrated carriers, shipping methods, and charge types are auto-discovered per file via `Sync_Reference_Data.sql`
 
 ---
 

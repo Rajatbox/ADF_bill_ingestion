@@ -12,7 +12,7 @@ ADF Pipeline Variables Required:
   OUTPUT (Query Results):
     - Status: 'SUCCESS' or 'ERROR'
     - InvoicesInserted: INT - Number of carrier_bill records inserted
-    - LineItemsInserted: INT - Number of landmark_bill line items inserted
+    - LineItemsInserted: INT - Number of bukuship_bill line items inserted
     - ErrorNumber: INT (if error);
     - ErrorMessage: NVARCHAR (if error)
     - ErrorLine: INT (if error)
@@ -20,7 +20,7 @@ ADF Pipeline Variables Required:
 Purpose: Two-step transactional data insertion process with file tracking:
          1. Aggregate charge rows by AccountNumber + InvoiceDate into carrier_bill
             (one invoice summary row per account+date, SUM of NetCost)
-         2. Insert one landmark_bill row per charge row (narrow format —
+         2. Insert one bukuship_bill row per charge row (narrow format —
             each row is a distinct charge for a tracking number)
 
 Tracking Number Logic:
@@ -30,9 +30,9 @@ Tracking Number Logic:
 
 Dimensions: 0 or NULL values are treated as NULL (NULLIF + zero check applied)
 
-Source:   billing.delta_landmark_bill
+Source:   billing.delta_bukuship_bill
 Targets:  billing.carrier_bill (invoice summaries)
-          billing.landmark_bill (charge-level line items)
+          billing.bukuship_bill (charge-level line items)
 
 Match:    Step 1: file_id (INSERT WHERE NOT EXISTS)
           Step 2: carrier_bill_id only (INSERT WHERE NOT EXISTS) per Design Constraint #9
@@ -84,7 +84,7 @@ BEGIN TRY
         ) AS num_shipments,
         MAX(d.AccountNumber) AS account_number,
         @File_id AS file_id
-    FROM billing.delta_landmark_bill AS d
+    FROM billing.delta_bukuship_bill AS d
     WHERE NULLIF(TRIM(d.AccountNumber), '') IS NOT NULL
       AND NULLIF(TRIM(d.InvoiceDate), '') IS NOT NULL
       AND NULLIF(TRIM(d.NetCost), '') IS NOT NULL
@@ -99,7 +99,7 @@ BEGIN TRY
 
     /*
     ================================================================================
-    Step 2: Insert Charge-Level Line Items into landmark_bill
+    Step 2: Insert Charge-Level Line Items into bukuship_bill
     ================================================================================
     One row per charge row from the delta table.
     Tracking number derived:
@@ -114,7 +114,7 @@ BEGIN TRY
     ================================================================================
     */
 
-    INSERT INTO billing.landmark_bill (
+    INSERT INTO billing.bukuship_bill (
         carrier_bill_id,
         company_name,
         carrier_name,
@@ -280,7 +280,7 @@ BEGIN TRY
                   AND CAST(d.EnteredHeight AS DECIMAL(18,2)) <> 0
              THEN CAST(d.EnteredHeight AS DECIMAL(18,2)) ELSE NULL END
 
-    FROM billing.delta_landmark_bill d
+    FROM billing.delta_bukuship_bill d
     INNER JOIN billing.carrier_bill cb
         ON cb.bill_number = d.AccountNumber
         AND cb.bill_date  = CAST(d.InvoiceDate AS DATE)
@@ -298,7 +298,7 @@ BEGIN TRY
           )
       AND NOT EXISTS (
             SELECT 1
-            FROM billing.landmark_bill t
+            FROM billing.bukuship_bill t
             WHERE t.carrier_bill_id = cb.carrier_bill_id
       );
 
@@ -321,7 +321,7 @@ BEGIN CATCH
     DECLARE @ErrorNumber  INT            = ERROR_NUMBER();
 
     DECLARE @DetailedError NVARCHAR(4000) =
-        '[Landmark] Insert_ELT_&_CB.sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) +
+        '[Bukuship] Insert_ELT_&_CB.sql failed at line ' + CAST(@ErrorLine AS NVARCHAR(10)) +
         ' (Error ' + CAST(@ErrorNumber AS NVARCHAR(10)) + '): ' + @ErrorMessage;
 
     SELECT
