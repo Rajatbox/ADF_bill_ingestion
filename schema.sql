@@ -606,7 +606,7 @@ CREATE TABLE billing.delta_eliteworks_bill (
     shipment_id VARCHAR(255) NULL,
     user_account VARCHAR(255) NULL,
     tracking_number VARCHAR(255) NULL,
-    status VARCHAR(50) NULL,
+    [status] VARCHAR(50) NULL,
     carrier VARCHAR(50) NULL,
     service VARCHAR(255) NULL,
     reference VARCHAR(255) NULL,
@@ -636,7 +636,7 @@ CREATE TABLE billing.delta_eliteworks_bill (
     delivered VARCHAR(50) NULL,
     delivered_days VARCHAR(50) NULL,
     delivered_business_days VARCHAR(50) NULL,
-    zone VARCHAR(50) NULL,
+    [zone] VARCHAR(50) NULL,
     charged VARCHAR(50) NULL,
     store_markup VARCHAR(50) NULL,
     platform_charged_with_corrections VARCHAR(50) NULL,
@@ -731,6 +731,71 @@ CREATE TABLE billing.delta_passport_bill (
     [FEE 8 DESCRIPTION]        VARCHAR(255) NULL,
     [FEE 8 AMOUNT]             VARCHAR(50)  NULL,
     [TOTAL]                    VARCHAR(50)  NULL
+);
+
+
+-- LANDMARK DELTA TABLE
+
+CREATE TABLE billing.delta_landmark_bill (
+    CompanyName                 VARCHAR(255) NULL,
+    CarrierName                 VARCHAR(255) NULL,
+    AccountNumber               VARCHAR(255) NULL,
+    InvoiceDate                 VARCHAR(50)  NULL,
+    ShipDate                    VARCHAR(50)  NULL,
+    DeliveryDate                VARCHAR(50)  NULL,
+    TrackingNumber              VARCHAR(255) NULL,
+    WaybillNumber               VARCHAR(255) NULL,
+    ChargeType                  VARCHAR(255) NULL,
+    ServiceGroup                VARCHAR(255) NULL,
+    ServiceName                 VARCHAR(255) NULL,
+    ChargeGroup                 VARCHAR(255) NULL,
+    ChargeName                  VARCHAR(255) NULL,
+    [Zone]                      VARCHAR(50)  NULL,
+    NetCost                     VARCHAR(50)  NULL,
+    PackageWeight               VARCHAR(50)  NULL,
+    PackageWeightUnit           VARCHAR(20)  NULL,
+    BilledWeight                VARCHAR(50)  NULL,
+    BilledWeightUnits           VARCHAR(20)  NULL,
+    WeightBreak                 VARCHAR(100) NULL,
+    [Length]                    VARCHAR(50)  NULL,
+    [Width]                     VARCHAR(50)  NULL,
+    [Height]                    VARCHAR(50)  NULL,
+    DimDivisor                  VARCHAR(50)  NULL,
+    IsDIM                       VARCHAR(10)  NULL,
+    DIMIncrease                 VARCHAR(50)  NULL,
+    Pieces                      VARCHAR(20)  NULL,
+    BundleNumber                VARCHAR(100) NULL,
+    Payor                       VARCHAR(100) NULL,
+    SenderName                  VARCHAR(255) NULL,
+    SenderCompany               VARCHAR(255) NULL,
+    SenderAddressLine1          VARCHAR(500) NULL,
+    SenderAddressLine2          VARCHAR(500) NULL,
+    SenderCity                  VARCHAR(255) NULL,
+    SenderState                 VARCHAR(50)  NULL,
+    SenderZipCode               VARCHAR(50)  NULL,
+    SenderCountry               VARCHAR(100) NULL,
+    ReceiverName                VARCHAR(255) NULL,
+    ReceiverCompany             VARCHAR(255) NULL,
+    ReceiverAddressLine1        VARCHAR(500) NULL,
+    ReceiverAddressLine2        VARCHAR(500) NULL,
+    ReceiverCity                VARCHAR(255) NULL,
+    ReceiverState               VARCHAR(50)  NULL,
+    ReceiverZipCode             VARCHAR(50)  NULL,
+    ReceiverCountry             VARCHAR(100) NULL,
+    Residential                 VARCHAR(10)  NULL,
+    ShipmentReference1          VARCHAR(255) NULL,
+    ShipmentReference2          VARCHAR(255) NULL,
+    Reference1                  VARCHAR(255) NULL,
+    Reference2                  VARCHAR(255) NULL,
+    Reference3                  VARCHAR(255) NULL,
+    CustomsValue                VARCHAR(50)  NULL,
+    CustomsValueCurrencyCode    VARCHAR(10)  NULL,
+    DeliveryConfirmation        VARCHAR(255) NULL,
+    IntlStatus                  VARCHAR(100) NULL,
+    Packaging                   VARCHAR(100) NULL,
+    EnteredLength               VARCHAR(50)  NULL,
+    EnteredWidth                VARCHAR(50)  NULL,
+    EnteredHeight               VARCHAR(50)  NULL
 );
 
 
@@ -888,15 +953,15 @@ CREATE TABLE billing.easypost_bill (
 	tracking_code varchar(40) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	invoice_number varchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	carrier_bill_id int NULL,
-	weight decimal(18,2) NULL,
-	rate decimal(18,2) NULL,
+	[weight] decimal(18,2) NULL,
+	[rate] decimal(18,2) NULL,
 	label_fee decimal(18,2) NULL,
 	postage_fee decimal(18,2) NULL,
 	usps_zone tinyint NULL,
 	from_zip char(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[length] decimal(18,2) NULL,
-	width decimal(18,2) NULL,
-	height decimal(18,2) NULL,
+	[width] decimal(18,2) NULL,
+	[height] decimal(18,2) NULL,
 	postage_label_created_at datetime2(0) NULL,
 	insurance_fee decimal(18,2) NULL,
 	carbon_offset_fee decimal(18,2) NULL,
@@ -1035,7 +1100,7 @@ CREATE TABLE billing.eliteworks_bill (
     tracking_number NVARCHAR(255) NOT NULL,
     shipment_date DATETIME NULL,
     service_method NVARCHAR(255) NULL,
-    zone NVARCHAR(50) NULL,
+    [zone] NVARCHAR(50) NULL,
     charged_amount DECIMAL(18,2) NULL,
     store_markup DECIMAL(18,2) NULL,
     platform_charged DECIMAL(18,2) NULL,
@@ -1085,9 +1150,9 @@ CREATE TABLE billing.flavorcloud_bill (
     integrated_carrier NVARCHAR(100) NULL,  -- Actual carrier name (DHL, FedEx, UPS, etc.)
     total_weight DECIMAL(18,6) NULL,
     weight_unit NVARCHAR(10) NULL,
-    length DECIMAL(18,2) NULL,
-    width DECIMAL(18,2) NULL,
-    height DECIMAL(18,2) NULL,
+    [length] DECIMAL(18,2) NULL,
+    [width] DECIMAL(18,2) NULL,
+    [height] DECIMAL(18,2) NULL,
     dimension_unit NVARCHAR(10) NULL,
     commissions DECIMAL(18,2) NULL,
     duties DECIMAL(18,2) NULL,
@@ -1119,6 +1184,111 @@ ON billing.flavorcloud_bill (created_date);
 -- Composite index for tracking number lookups
 CREATE NONCLUSTERED INDEX IX_flavorcloud_bill_tracking_number_invoice
 ON billing.flavorcloud_bill (tracking_number, invoice_number, invoice_date);
+
+
+-- LANDMARK BILL TABLE
+
+CREATE TABLE billing.landmark_bill (
+    id                          INT IDENTITY(1,1) NOT NULL,
+    carrier_bill_id             INT              NULL,
+
+    -- Invoice / file identifiers
+    company_name                NVARCHAR(255)    NULL,
+    carrier_name                NVARCHAR(255)    NULL,   -- Integrated carrier (e.g. "DHL eCommerce", "Landmark Global")
+    account_number              NVARCHAR(100)    NOT NULL,
+    invoice_date                DATE             NOT NULL,
+
+    -- Shipment dates
+    ship_date                   NVARCHAR(50)     NULL,   -- Stored as string; not always a valid date
+    delivery_date               NVARCHAR(50)     NULL,
+
+    -- Tracking
+    tracking_number             NVARCHAR(255)    NOT NULL,  -- Constructed for DHL: '420' + zip + waybill
+    waybill_number              NVARCHAR(255)    NULL,
+
+    -- Charge classification
+    charge_type                 NVARCHAR(255)    NULL,   -- e.g. "Freight Charge", "Accessorial"
+    service_group               NVARCHAR(255)    NULL,
+    service_name                NVARCHAR(255)    NULL,   -- Shipping method
+    charge_group                NVARCHAR(255)    NULL,
+    charge_name                 NVARCHAR(255)    NULL,   -- e.g. "Freight Charge", "Fuel Surcharge", "Broker Fee"
+    [zone]                      NVARCHAR(50)     NULL,
+    net_cost                    DECIMAL(18,2)    NOT NULL,
+
+    -- Weight
+    package_weight              DECIMAL(18,6)    NULL,
+    package_weight_unit         NVARCHAR(20)     NULL,
+    billed_weight               DECIMAL(18,6)    NULL,
+    billed_weight_units         NVARCHAR(20)     NULL,
+    weight_break                NVARCHAR(100)    NULL,
+
+    -- Dimensions (NULL when 0 or absent; DimDivisor=139 confirms inches)
+    [length]                    DECIMAL(18,2)    NULL,
+    [width]                     DECIMAL(18,2)    NULL,
+    [height]                    DECIMAL(18,2)    NULL,
+    dim_divisor                 NVARCHAR(50)     NULL,
+    is_dim                      NVARCHAR(10)     NULL,
+    dim_increase                NVARCHAR(50)     NULL,
+
+    -- Shipment metadata
+    pieces                      INT              NULL,
+    bundle_number               NVARCHAR(100)    NULL,
+    payor                       NVARCHAR(100)    NULL,
+
+    -- Sender address
+    sender_name                 NVARCHAR(255)    NULL,
+    sender_company              NVARCHAR(255)    NULL,
+    sender_address_line1        NVARCHAR(500)    NULL,
+    sender_address_line2        NVARCHAR(500)    NULL,
+    sender_city                 NVARCHAR(255)    NULL,
+    sender_state                NVARCHAR(50)     NULL,
+    sender_zip_code             NVARCHAR(50)     NULL,
+    sender_country              NVARCHAR(100)    NULL,
+
+    -- Receiver address
+    receiver_name               NVARCHAR(255)    NULL,
+    receiver_company            NVARCHAR(255)    NULL,
+    receiver_address_line1      NVARCHAR(500)    NULL,
+    receiver_address_line2      NVARCHAR(500)    NULL,
+    receiver_city               NVARCHAR(255)    NULL,
+    receiver_state              NVARCHAR(50)     NULL,
+    receiver_zip_code           NVARCHAR(50)     NULL,
+    receiver_country            NVARCHAR(100)    NULL,
+    residential                 NVARCHAR(10)     NULL,
+
+    -- References
+    shipment_reference1         NVARCHAR(255)    NULL,
+    shipment_reference2         NVARCHAR(255)    NULL,
+    reference1                  NVARCHAR(255)    NULL,
+    reference2                  NVARCHAR(255)    NULL,
+    reference3                  NVARCHAR(255)    NULL,
+
+    -- Customs
+    customs_value               DECIMAL(18,2)    NULL,
+    customs_value_currency_code NVARCHAR(10)     NULL,
+
+    -- Misc
+    delivery_confirmation       NVARCHAR(255)    NULL,
+    intl_status                 NVARCHAR(100)    NULL,
+    packaging                   NVARCHAR(100)    NULL,
+    entered_length              DECIMAL(18,2)    NULL,
+    entered_width               DECIMAL(18,2)    NULL,
+    entered_height              DECIMAL(18,2)    NULL,
+
+    created_date                DATETIME2        DEFAULT SYSDATETIME() NOT NULL,
+
+    CONSTRAINT PK_landmark_bill PRIMARY KEY (id),
+    CONSTRAINT FK_landmark_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+        REFERENCES billing.carrier_bill(carrier_bill_id)
+);
+
+-- FK lookup performance
+CREATE NONCLUSTERED INDEX IX_landmark_bill_carrier_bill_id
+ON billing.landmark_bill (carrier_bill_id);
+
+-- Tracking number lookups (used by Insert_Unified_tables.sql)
+CREATE NONCLUSTERED INDEX IX_landmark_bill_tracking_number
+ON billing.landmark_bill (tracking_number, carrier_bill_id);
 
 
 -- PASSPORT BILL TABLE
@@ -1153,7 +1323,7 @@ CREATE TABLE billing.passport_bill (
     width_in                DECIMAL(18,2)    NULL,
     height_in               DECIMAL(18,2)    NULL,
     currency                NVARCHAR(10)     NULL,
-    rate                    DECIMAL(18,2)    NULL,
+    [rate]                  DECIMAL(18,2)    NULL,
     fuel_surcharge          DECIMAL(18,2)    NULL,
     tax                     DECIMAL(18,2)    NULL,
     duty                    DECIMAL(18,2)    NULL,
@@ -1205,9 +1375,18 @@ GOLD LAYER TABLES
 /*
 Note: dbo.carrier table (reference table - assumed to exist in database)
 New column added via migration: is_aggregator BIT DEFAULT 0 NULL
-  - Identifies if carrier is an aggregator (Eliteworks, EasyPost, Passport, FlavorCloud)
-  - NULL/0 = direct carrier (FedEx, UPS, USPS, DHL)
+  - Identifies if carrier is an aggregator (Eliteworks, EasyPost, Passport, FlavorCloud, Bukuship)
+  - NULL/0 = direct carrier (FedEx, UPS, USPS, DHL, Landmark Global)
   - 1 = aggregator
+
+Seed / migration INSERT for Bukuship (run once per environment):
+  INSERT INTO dbo.carrier (carrier_name, is_active, is_aggregator)
+  SELECT 'Bukuship', 1, 1
+  WHERE NOT EXISTS (SELECT 1 FROM dbo.carrier WHERE LOWER(carrier_name) = 'bukuship');
+
+  Bukuship routes through DHL eCommerce and Landmark Global as integrated carriers.
+  Both are auto-discovered from CarrierName in billing.landmark_bill via
+  Sync_Reference_Data.sql Block 0 (INSERT-IF-NOT-EXISTS, is_aggregator = 0).
 */
 
 CREATE TABLE billing.carrier_bill ( -- rename to carrier_bill
@@ -1411,7 +1590,7 @@ CREATE TABLE dbo.carrier_cost_ledger (
 	carrier_invoice_date date NOT NULL,
 	is_processed bit DEFAULT 0 NOT NULL,
 	has_data bit DEFAULT 0 NULL,
-	status varchar(30) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[status] varchar(30) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	reason nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	note nvarchar(MAX) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	status_updated_at datetime2(0) NULL,
