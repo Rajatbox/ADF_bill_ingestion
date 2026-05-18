@@ -734,6 +734,57 @@ CREATE TABLE billing.delta_passport_bill (
 );
 
 
+-- USPS MODERN DELTA TABLE
+-- 1:1 replica of ShipHero label API export (44 columns, snake_case headers, all VARCHAR).
+-- Source: ShipHero label-level endpoint — pre-filtered to USPS Modern, one row per shipment.
+-- dim_weight / dim_height / dim_width / dim_length include embedded unit strings (e.g. "1.5562 lb").
+CREATE TABLE billing.delta_usps_modern_bill (
+    shipment_order_id       VARCHAR(255) NULL,
+    shipment_created_date   VARCHAR(255) NULL,
+    label_id                VARCHAR(255) NULL,
+    label_legacy_id         VARCHAR(255) NULL,
+    account_id              VARCHAR(255) NULL,
+    shipment_id             VARCHAR(255) NULL,
+    order_id                VARCHAR(255) NULL,
+    box_id                  VARCHAR(255) NULL,
+    box_name                VARCHAR(255) NULL,
+    status                  VARCHAR(255) NULL,
+    tracking_number         VARCHAR(255) NULL,
+    alternate_tracking_id   VARCHAR(255) NULL,
+    order_number            VARCHAR(255) NULL,
+    order_account_id        VARCHAR(255) NULL,
+    carrier                 VARCHAR(255) NULL,
+    shipping_name           VARCHAR(MAX) NULL,
+    shipping_method         VARCHAR(255) NULL,
+    cost                    VARCHAR(255) NULL,
+    box_code                VARCHAR(255) NULL,
+    device_id               VARCHAR(255) NULL,
+    delivered               VARCHAR(255) NULL,
+    picked_up               VARCHAR(255) NULL,
+    refunded                VARCHAR(255) NULL,
+    needs_refund            VARCHAR(255) NULL,
+    profile                 VARCHAR(255) NULL,
+    partner_fulfillment_id  VARCHAR(255) NULL,
+    full_size_to_print      VARCHAR(MAX) NULL,
+    packing_slip            VARCHAR(255) NULL,
+    warehouse               VARCHAR(255) NULL,
+    warehouse_id            VARCHAR(255) NULL,
+    insurance_amount        VARCHAR(255) NULL,
+    carrier_account_id      VARCHAR(255) NULL,
+    source                  VARCHAR(255) NULL,
+    label_created_date      VARCHAR(255) NULL,
+    tracking_url            VARCHAR(MAX) NULL,
+    package_number          VARCHAR(255) NULL,
+    parcelview_url          VARCHAR(MAX) NULL,
+    tracking_status         VARCHAR(255) NULL,
+    in_shipping_container   VARCHAR(255) NULL,
+    shipping_container_id   VARCHAR(255) NULL,
+    dim_weight              VARCHAR(255) NULL,  -- e.g. "1.5562 lb" — parse + convert to OZ
+    dim_height              VARCHAR(255) NULL,  -- e.g. "1.0000 inch"
+    dim_width               VARCHAR(255) NULL,  -- e.g. "12.00 inch"
+    dim_length              VARCHAR(255) NULL   -- e.g. "20.00 inch"
+);
+
 /*
 ================================================================================
 Normalized Carrier Tables
@@ -1195,6 +1246,47 @@ ON billing.passport_bill (created_date);
 CREATE NONCLUSTERED INDEX IX_passport_bill_tracking_number
 ON billing.passport_bill (tracking_number, invoice_number, invoice_date);
 
+
+-- USPS MODERN BILL TABLE (Normalized carrier bill line items)
+-- Source: ShipHero label API export. One row per shipment.
+-- Weight stored in raw LB; converted to OZ in Insert_Unified_tables.sql.
+-- Dimensions already in inches; stored as-is.
+CREATE TABLE billing.usps_modern_bill (
+    id                      INT IDENTITY(1,1)   NOT NULL,
+    carrier_bill_id         INT                 NULL,
+    invoice_number          NVARCHAR(100)       NOT NULL,
+    invoice_date            DATE                NOT NULL,
+    tracking_number         NVARCHAR(255)       NOT NULL,
+    label_id                NVARCHAR(255)       NULL,
+    label_legacy_id         NVARCHAR(255)       NULL,
+    order_number            NVARCHAR(255)       NULL,
+    order_account_id        NVARCHAR(255)       NULL,
+    shipment_created_date   DATETIME2           NULL,
+    label_created_date      DATETIME2           NULL,   -- used as ship date
+    shipping_method         NVARCHAR(255)       NULL,
+    billed_weight_lb        DECIMAL(18,4)       NULL,   -- raw LB; convert × 16 in unified layer
+    billed_height_in        DECIMAL(18,4)       NULL,
+    billed_length_in        DECIMAL(18,4)       NULL,
+    billed_width_in         DECIMAL(18,4)       NULL,
+    cost                    DECIMAL(18,2)       NULL,   -- charge ingested as "Freight charge"
+    status                  NVARCHAR(50)        NULL,
+    box_name                NVARCHAR(255)       NULL,
+    carrier_account_id      NVARCHAR(255)       NULL,
+    warehouse               NVARCHAR(255)       NULL,
+    created_date            DATETIME2           DEFAULT sysdatetime() NOT NULL,
+
+    CONSTRAINT PK_usps_modern_bill PRIMARY KEY (id),
+    CONSTRAINT FK_usps_modern_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+        REFERENCES billing.carrier_bill(carrier_bill_id)
+);
+
+-- Index for FK lookup performance (join with carrier_bill)
+CREATE NONCLUSTERED INDEX IX_usps_modern_bill_carrier_bill_id
+ON billing.usps_modern_bill (carrier_bill_id);
+
+-- Composite index for tracking number lookups
+CREATE NONCLUSTERED INDEX IX_usps_modern_bill_tracking_number
+ON billing.usps_modern_bill (tracking_number, invoice_number, invoice_date);
 
 /*
 ================================================================================
