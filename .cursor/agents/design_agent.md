@@ -1,3 +1,8 @@
+---
+name: design_agent
+model: claude-4.6-sonnet-medium-thinking
+---
+
 # Design Agent
 
 ## Role
