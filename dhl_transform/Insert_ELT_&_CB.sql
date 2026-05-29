@@ -213,7 +213,9 @@ BEGIN TRY
         extra_length_surcharge,
         extra_volume_surcharge,
         delivery_area_surcharge_amount,
-        dangerous_goods_charge
+        dangerous_goods_charge,
+        billing_ref1,
+        bol_number
     )
     SELECT 
         cb.carrier_bill_id,
@@ -273,7 +275,9 @@ BEGIN TRY
         CAST(NULLIF(TRIM(d.extra_length_surcharge), '') AS decimal(18,2)),
         CAST(NULLIF(TRIM(d.extra_volume_surcharge), '') AS decimal(18,2)),
         CAST(NULLIF(TRIM(d.delivery_area_surcharge), '') AS decimal(18,2)),
-        CAST(NULLIF(TRIM(d.dangerous_goods_charge), '') AS decimal(18,2))
+        CAST(NULLIF(TRIM(d.dangerous_goods_charge), '') AS decimal(18,2)),
+        CAST(d.billing_ref1 AS nvarchar(255)),
+        CAST(d.bol_number AS nvarchar(255))
     FROM billing.delta_dhl_bill d
     INNER JOIN billing.carrier_bill cb
         ON cb.bill_number = CAST(d.invoice_number AS nvarchar(50))

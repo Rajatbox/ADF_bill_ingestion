@@ -234,7 +234,8 @@ billing.delta_fedex_bill AS d
     [Tracking ID Charge Description_49],
     [Tracking ID Charge Amount_49],
     [Tracking ID Charge Description_50],
-    [Tracking ID Charge Amount_50]
+    [Tracking ID Charge Amount_50],
+    original_customer_reference
 )
 SELECT 
     cb.carrier_bill_id,
@@ -355,7 +356,8 @@ SELECT
     NULLIF(TRIM(d.[Tracking ID Charge Description_49]), '') AS [Tracking ID Charge Description_49],
     CAST(NULLIF(REPLACE(TRIM(d.[Tracking ID Charge Amount_49]), ',', ''), '') AS DECIMAL(18,2)) AS [Tracking ID Charge Amount_49],
     NULLIF(TRIM(d.[Tracking ID Charge Description_50]), '') AS [Tracking ID Charge Description_50],
-    CAST(NULLIF(REPLACE(TRIM(d.[Tracking ID Charge Amount_50]), ',', ''), '') AS DECIMAL(18,2)) AS [Tracking ID Charge Amount_50]
+    CAST(NULLIF(REPLACE(TRIM(d.[Tracking ID Charge Amount_50]), ',', ''), '') AS DECIMAL(18,2)) AS [Tracking ID Charge Amount_50],
+    CAST(NULLIF(TRIM(d.[Original Customer Reference]), '') AS NVARCHAR(255)) AS original_customer_reference
 FROM billing.delta_fedex_bill d
 INNER JOIN billing.carrier_bill cb
     ON cb.bill_number = NULLIF(TRIM(d.[Invoice Number]), '')

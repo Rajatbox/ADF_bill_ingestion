@@ -163,10 +163,18 @@ BEGIN TRY
     ) p
     CROSS APPLY (
         -- Extract and convert each dimension (TRIM spaces, TRY_CAST for optional dims, NULLIF zero)
+        -- Guard each SUBSTRING with CASE WHEN: CHARINDEX returns 0 when delimiter is absent,
+        -- which would produce a negative length and trigger Error 537.
         SELECT
-            NULLIF(TRY_CAST(TRIM(SUBSTRING(d.[Package Dimensions], 1, p.pos1 - 1)) AS decimal(18,2)), 0) AS dim_length,
-            NULLIF(TRY_CAST(TRIM(SUBSTRING(d.[Package Dimensions], p.pos1 + 1, p.pos2 - p.pos1 - 1)) AS decimal(18,2)), 0) AS dim_width,
-            NULLIF(TRY_CAST(TRIM(SUBSTRING(d.[Package Dimensions], p.pos2 + 1, LEN(d.[Package Dimensions]))) AS decimal(18,2)), 0) AS dim_height
+            NULLIF(TRY_CAST(TRIM(CASE WHEN p.pos1 > 0
+                THEN SUBSTRING(d.[Package Dimensions], 1, p.pos1 - 1)
+            END) AS decimal(18,2)), 0) AS dim_length,
+            NULLIF(TRY_CAST(TRIM(CASE WHEN p.pos1 > 0 AND p.pos2 > p.pos1
+                THEN SUBSTRING(d.[Package Dimensions], p.pos1 + 1, p.pos2 - p.pos1 - 1)
+            END) AS decimal(18,2)), 0) AS dim_width,
+            NULLIF(TRY_CAST(TRIM(CASE WHEN p.pos2 > 0
+                THEN SUBSTRING(d.[Package Dimensions], p.pos2 + 1, LEN(d.[Package Dimensions]))
+            END) AS decimal(18,2)), 0) AS dim_height
     ) dims
     INNER JOIN billing.carrier_bill AS cb
         ON cb.bill_number = d.[Invoice Number]
