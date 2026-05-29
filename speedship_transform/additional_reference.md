@@ -1,0 +1,2 @@
+This is a straight forward aggregator, so follow aggregator.md to integrate it.
+Just to mention this one has unpivoted charge type columns, but there are only 8 of them so no need to create a view for it rather use it simply in the cross apply.

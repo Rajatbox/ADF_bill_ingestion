@@ -61,6 +61,7 @@ The Carrier table stores both aggregators and traditional carriers, with a flag 
 | 6          | Passport     | Yes       | No            |
 | 7          | EasyPost     | Yes       | **Yes**       |
 | 8          | FlavorCloud  | Yes       | **Yes**       |
+| 9          | Speedship    | Yes       | **Yes**       |
 
 **Auto-Discovery:** Aggregator billing data may reference carrier names not yet in this table (e.g., a new last-mile carrier). Each aggregator's `Sync_Reference_Data.sql` runs a Block 0 INSERT-IF-NOT-EXISTS that discovers unknown `integrated_carrier` values from billing data and inserts them with `is_aggregator = 0`, `is_active = 1` before the shipping method sync executes. This ensures the downstream `integrated_carrier_id` FK resolves correctly without manual seeding.
 
@@ -341,6 +342,49 @@ SUM(Shipping Charges + Commissions + LandedCost + Insurance) = Shipment Total Ch
 3. Zero-amount charges excluded from shipment_charges
 4. LandedCost stored as a single charge (not split into Duties/Taxes/Fees)
 5. New service levels auto-discovered from data
+
+---
+
+## Speedship
+
+### Overview
+Speedship is a small-package shipping aggregator. Billing data is a CSV with one row per shipment (UPS airbills in the sample file), up to eight charge type/amount pairs per row, and support for **multiple invoices per file** (one `carrier_bill` per distinct `Invoice #` + `Invoice Date`).
+
+### Invoice Information
+- **Invoice Number**: `Invoice #` column (e.g. `260517W058461`)
+- **Invoice Date**: `Invoice Date` column (`yyyy-MM-dd`)
+- **Account Number**: `Customer #` (used for parent-pipeline account validation)
+- **Row Total**: `Charge Total` (sum of charge amounts on the row)
+
+### Integrated Carrier (SCAC)
+- **Source column**: `SCAC`
+- **Mapping**: `UNITED PARCEL SERVICE` → `UPS` (other SCAC values auto-discovered into `dbo.carrier` as-is)
+- **Shipping method**: `Service level` (e.g. `Residential Ground`, `UPS Ground Saver >= 1LB`)
+- **Zone**: ` Zone` column (note leading space in CSV header)
+
+### Charge Structure (Wide — 8 pairs)
+| Pattern | Freight | Category |
+|---------|---------|----------|
+| `SMALL PACKAGE FREIGHT` | freight=1 | Other (11) |
+| Names containing `adjustment` | freight=0 | Adjustment (16) |
+| All others (incl. `ADDITIONAL HANDLING`, surcharges) | freight=0 | Other (11) |
+| Blank type + non-zero amount | `Unknown Charge` (seeded) | Other (11) |
+
+**Unpivoting:** `CROSS APPLY (VALUES …)` in `Insert_Unified_tables.sql` (no view). Zero amounts are skipped.
+
+### Unit Conversions
+- **Weight:** Parsed from `Charged Weight` (e.g. `3 LB`) → stored numeric + unit → **OZ** in unified layer (`LB × 16`)
+- **Dimensions:** Not present in file
+
+### Schema
+- **Delta:** `billing.delta_speedship_bill` (83 columns, all VARCHAR, 1:1 with CSV)
+- **Silver:** `billing.speedship_bill` (typed line items + `charge_type_1`…`charge_amount_8`)
+
+### Key Business Rules
+1. Multiple invoices per file supported via `GROUP BY Invoice #, Invoice Date`
+2. File-based idempotency via `carrier_bill.file_id`
+3. Negative charge amounts preserved (discounts / incentive modifiers)
+4. `Unknown Charge` seeded in `Sync_Reference_Data.sql` before dynamic discovery
 
 ---
 

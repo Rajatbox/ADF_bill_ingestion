@@ -1,127 +1,210 @@
 /*
 ================================================================================
-Migration: Add USPS Modern carrier tables
+Migration: ADF Bill Ingestion Schema Updates
 ================================================================================
-Purpose: Creates staging (delta) and normalized (carrier-specific) tables
-         for the USPS Modern billing integration.
+Phase 1 — Promote resolution fields into silver bill tables (DHL, FedEx)
+Phase 2 — Speedship aggregator staging and silver tables
 
-Source:  ShipHero label API export — one row per shipment, pre-filtered to
-         USPS Modern. 44 snake_case columns.
-
-New tables:
-  - billing.delta_usps_modern_bill   (bronze / staging)
-  - billing.usps_modern_bill         (silver / normalized)
-
-Affected scripts (new in this release):
-  - usps_modern_transform/Insert_ELT_&_CB.sql
-  - usps_modern_transform/Sync_Reference_Data.sql
-  - usps_modern_transform/Insert_Unified_tables.sql
-
-Idempotent: DROP IF EXISTS before each CREATE — safe to rerun.
+Idempotent: guarded by sys.columns / OBJECT_ID existence checks.
 ================================================================================
 */
 
 SET NOCOUNT ON;
 
 -- ============================================================
--- DELTA TABLE (bronze)
+-- Phase 1: billing.dhl_bill
 -- ============================================================
 
-IF OBJECT_ID('billing.delta_usps_modern_bill', 'U') IS NOT NULL
-    DROP TABLE billing.delta_usps_modern_bill;
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('billing.dhl_bill') AND name = 'billing_ref1'
+)
+BEGIN
+    ALTER TABLE billing.dhl_bill ADD billing_ref1 NVARCHAR(255) NULL;
+    PRINT 'Added billing.dhl_bill.billing_ref1';
+END
+ELSE
+    PRINT 'billing.dhl_bill.billing_ref1 already exists — skipped';
 
-CREATE TABLE billing.delta_usps_modern_bill (
-    shipment_order_id       VARCHAR(255) NULL,
-    shipment_created_date   VARCHAR(255) NULL,
-    label_id                VARCHAR(255) NULL,
-    label_legacy_id         VARCHAR(255) NULL,
-    account_id              VARCHAR(255) NULL,
-    shipment_id             VARCHAR(255) NULL,
-    order_id                VARCHAR(255) NULL,
-    box_id                  VARCHAR(255) NULL,
-    box_name                VARCHAR(255) NULL,
-    status                  VARCHAR(255) NULL,
-    tracking_number         VARCHAR(255) NULL,
-    alternate_tracking_id   VARCHAR(255) NULL,
-    order_number            VARCHAR(255) NULL,
-    order_account_id        VARCHAR(255) NULL,
-    carrier                 VARCHAR(255) NULL,
-    shipping_name           VARCHAR(MAX) NULL,
-    shipping_method         VARCHAR(255) NULL,
-    cost                    VARCHAR(255) NULL,
-    box_code                VARCHAR(255) NULL,
-    device_id               VARCHAR(255) NULL,
-    delivered               VARCHAR(255) NULL,
-    picked_up               VARCHAR(255) NULL,
-    refunded                VARCHAR(255) NULL,
-    needs_refund            VARCHAR(255) NULL,
-    profile                 VARCHAR(255) NULL,
-    partner_fulfillment_id  VARCHAR(255) NULL,
-    full_size_to_print      VARCHAR(MAX) NULL,
-    packing_slip            VARCHAR(255) NULL,
-    warehouse               VARCHAR(255) NULL,
-    warehouse_id            VARCHAR(255) NULL,
-    insurance_amount        VARCHAR(255) NULL,
-    carrier_account_id      VARCHAR(255) NULL,
-    source                  VARCHAR(255) NULL,
-    label_created_date      VARCHAR(255) NULL,
-    tracking_url            VARCHAR(MAX) NULL,
-    package_number          VARCHAR(255) NULL,
-    parcelview_url          VARCHAR(MAX) NULL,
-    tracking_status         VARCHAR(255) NULL,
-    in_shipping_container   VARCHAR(255) NULL,
-    shipping_container_id   VARCHAR(255) NULL,
-    dim_weight              VARCHAR(255) NULL,  -- e.g. "1.5562 lb"  → parsed + converted to OZ in ELT
-    dim_height              VARCHAR(255) NULL,  -- e.g. "1.0000 inch"
-    dim_width               VARCHAR(255) NULL,  -- e.g. "12.00 inch"
-    dim_length              VARCHAR(255) NULL   -- e.g. "20.00 inch"
-);
-
-PRINT 'Created billing.delta_usps_modern_bill';
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('billing.dhl_bill') AND name = 'bol_number'
+)
+BEGIN
+    ALTER TABLE billing.dhl_bill ADD bol_number NVARCHAR(255) NULL;
+    PRINT 'Added billing.dhl_bill.bol_number';
+END
+ELSE
+    PRINT 'billing.dhl_bill.bol_number already exists — skipped';
 
 -- ============================================================
--- CARRIER-SPECIFIC TABLE (silver)
--- Indexes are dropped automatically with the table.
+-- Phase 1: billing.fedex_bill
 -- ============================================================
 
-IF OBJECT_ID('billing.usps_modern_bill', 'U') IS NOT NULL
-    DROP TABLE billing.usps_modern_bill;
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('billing.fedex_bill') AND name = 'original_customer_reference'
+)
+BEGIN
+    ALTER TABLE billing.fedex_bill ADD original_customer_reference NVARCHAR(255) NULL;
+    PRINT 'Added billing.fedex_bill.original_customer_reference';
+END
+ELSE
+    PRINT 'billing.fedex_bill.original_customer_reference already exists — skipped';
 
-CREATE TABLE billing.usps_modern_bill (
-    id                      INT IDENTITY(1,1)   NOT NULL,
-    carrier_bill_id         INT                 NULL,
-    invoice_number          NVARCHAR(100)       NOT NULL,
-    invoice_date            DATE                NOT NULL,
-    tracking_number         NVARCHAR(255)       NOT NULL,
-    label_id                NVARCHAR(255)       NULL,
-    label_legacy_id         NVARCHAR(255)       NULL,
-    order_number            NVARCHAR(255)       NULL,
-    order_account_id        NVARCHAR(255)       NULL,
-    shipment_created_date   DATETIME2           NULL,
-    label_created_date      DATETIME2           NULL,   -- used as ship date
-    shipping_method         NVARCHAR(255)       NULL,
-    billed_weight_lb        DECIMAL(18,4)       NULL,   -- raw LB; converted × 16 to OZ in unified layer
-    billed_height_in        DECIMAL(18,4)       NULL,
-    billed_length_in        DECIMAL(18,4)       NULL,
-    billed_width_in         DECIMAL(18,4)       NULL,
-    cost                    DECIMAL(18,2)       NULL,   -- "Freight charge" amount
-    status                  NVARCHAR(50)        NULL,
-    box_name                NVARCHAR(255)       NULL,
-    carrier_account_id      NVARCHAR(255)       NULL,
-    warehouse               NVARCHAR(255)       NULL,
-    created_date            DATETIME2           DEFAULT sysdatetime() NOT NULL,
+-- ============================================================
+-- Phase 2: Speedship delta + silver tables
+-- ============================================================
 
-    CONSTRAINT PK_usps_modern_bill PRIMARY KEY (id),
-    CONSTRAINT FK_usps_modern_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
-        REFERENCES billing.carrier_bill(carrier_bill_id)
-);
+IF OBJECT_ID('billing.delta_speedship_bill', 'U') IS NULL
+BEGIN
+    CREATE TABLE billing.delta_speedship_bill (
+        [Customer #] VARCHAR(255) NULL,
+        [Invoice #] VARCHAR(255) NULL,
+        [Line of Business] VARCHAR(255) NULL,
+        [Airbill #] VARCHAR(255) NULL,
+        [Ship date] VARCHAR(255) NULL,
+        [PRO #] VARCHAR(255) NULL,
+        [BOL #] VARCHAR(255) NULL,
+        [SCAC] VARCHAR(255) NULL,
+        [Bill Type] VARCHAR(255) NULL,
+        [Shippers Name] VARCHAR(255) NULL,
+        [Shippers Address 1] VARCHAR(255) NULL,
+        [Shippers Address 2] VARCHAR(255) NULL,
+        [Shippers Address 3] VARCHAR(255) NULL,
+        [Shippers City] VARCHAR(255) NULL,
+        [Shippers State] VARCHAR(255) NULL,
+        [Shippers ZIP] VARCHAR(255) NULL,
+        [Receiver Name] VARCHAR(255) NULL,
+        [Receiver Address 1] VARCHAR(255) NULL,
+        [Receiver Address 2] VARCHAR(255) NULL,
+        [Receiver Address 3] VARCHAR(255) NULL,
+        [Receiver City] VARCHAR(255) NULL,
+        [Receiver State] VARCHAR(255) NULL,
+        [Receiver ZIP] VARCHAR(255) NULL,
+        [Consignee Name] VARCHAR(255) NULL,
+        [Consignee City] VARCHAR(255) NULL,
+        [Consignee State] VARCHAR(255) NULL,
+        [Consignee Zip] VARCHAR(255) NULL,
+        [Originating Customer] VARCHAR(255) NULL,
+        [Customer Name] VARCHAR(255) NULL,
+        [Customer Address 1] VARCHAR(255) NULL,
+        [Customer Address 2] VARCHAR(255) NULL,
+        [Customer City] VARCHAR(255) NULL,
+        [Customer State] VARCHAR(255) NULL,
+        [Customer ZIP] VARCHAR(255) NULL,
+        [Handling Unit] VARCHAR(255) NULL,
+        [Pieces] VARCHAR(255) NULL,
+        [Original Weight] VARCHAR(255) NULL,
+        [Charged Weight] VARCHAR(255) NULL,
+        [Class] VARCHAR(255) NULL,
+        [Charge Type 1] VARCHAR(255) NULL,
+        [Charge Amount 1] VARCHAR(255) NULL,
+        [Charge Type 2] VARCHAR(255) NULL,
+        [Charge Amount 2] VARCHAR(255) NULL,
+        [Charge Type 3] VARCHAR(255) NULL,
+        [Charge Amount 3] VARCHAR(255) NULL,
+        [Charge Type 4] VARCHAR(255) NULL,
+        [Charge Amount 4] VARCHAR(255) NULL,
+        [Charge Type 5] VARCHAR(255) NULL,
+        [Charge Amount 5] VARCHAR(255) NULL,
+        [Charge Type 6] VARCHAR(255) NULL,
+        [Charge Amount 6] VARCHAR(255) NULL,
+        [Charge Type 7] VARCHAR(255) NULL,
+        [Charge Amount 7] VARCHAR(255) NULL,
+        [Charge Type 8] VARCHAR(255) NULL,
+        [Charge Amount 8] VARCHAR(255) NULL,
+        [Charge Total] VARCHAR(255) NULL,
+        [Invoice Date] VARCHAR(255) NULL,
+        [Billing Reference 1] VARCHAR(255) NULL,
+        [Billing Reference 2] VARCHAR(255) NULL,
+        [Vendor Reference 1] VARCHAR(255) NULL,
+        [Vendor Reference 2] VARCHAR(255) NULL,
+        [Sent By] VARCHAR(255) NULL,
+        [Service level] VARCHAR(255) NULL,
+        [ Zone] VARCHAR(255) NULL,
+        [You Owe As] VARCHAR(255) NULL,
+        [Description1] VARCHAR(255) NULL,
+        [Description2] VARCHAR(255) NULL,
+        [Description3] VARCHAR(255) NULL,
+        [Description4] VARCHAR(255) NULL,
+        [Pickuplocation] VARCHAR(255) NULL,
+        [SenderNo] VARCHAR(255) NULL,
+        [ReceiverNo] VARCHAR(255) NULL,
+        [ReceiverLine1] VARCHAR(255) NULL,
+        [ReceiverLine2] VARCHAR(255) NULL,
+        [Package Reference 1] VARCHAR(255) NULL,
+        [Package Reference 2] VARCHAR(255) NULL,
+        [Package Reference 3] VARCHAR(255) NULL,
+        [Package Reference 4] VARCHAR(255) NULL,
+        [Package Reference 5] VARCHAR(255) NULL,
+        [Package Reference 6] VARCHAR(255) NULL,
+        [Package Reference 7] VARCHAR(255) NULL,
+        [Package Reference 8] VARCHAR(255) NULL,
+        [UPS #] VARCHAR(255) NULL
+    );
+    PRINT 'Created billing.delta_speedship_bill';
+END
+ELSE
+    PRINT 'billing.delta_speedship_bill already exists — skipped';
 
-CREATE NONCLUSTERED INDEX IX_usps_modern_bill_carrier_bill_id
-ON billing.usps_modern_bill (carrier_bill_id);
+IF OBJECT_ID('billing.speedship_bill', 'U') IS NULL
+BEGIN
+    CREATE TABLE billing.speedship_bill (
+        id INT IDENTITY(1,1) NOT NULL,
+        carrier_bill_id INT NULL,
+        invoice_number NVARCHAR(100) NOT NULL,
+        invoice_date DATE NOT NULL,
+        customer_number NVARCHAR(100) NULL,
+        line_of_business NVARCHAR(50) NULL,
+        tracking_number NVARCHAR(255) NOT NULL,
+        shipment_date DATE NULL,
+        scac NVARCHAR(255) NULL,
+        integrated_carrier NVARCHAR(100) NULL,
+        bill_type NVARCHAR(50) NULL,
+        service_level NVARCHAR(255) NULL,
+        destination_zone NVARCHAR(50) NULL,
+        charged_weight DECIMAL(18,6) NULL,
+        weight_unit NVARCHAR(10) NULL,
+        charge_total DECIMAL(18,2) NULL,
+        charge_type_1 NVARCHAR(255) NULL,
+        charge_amount_1 DECIMAL(18,2) NULL,
+        charge_type_2 NVARCHAR(255) NULL,
+        charge_amount_2 DECIMAL(18,2) NULL,
+        charge_type_3 NVARCHAR(255) NULL,
+        charge_amount_3 DECIMAL(18,2) NULL,
+        charge_type_4 NVARCHAR(255) NULL,
+        charge_amount_4 DECIMAL(18,2) NULL,
+        charge_type_5 NVARCHAR(255) NULL,
+        charge_amount_5 DECIMAL(18,2) NULL,
+        charge_type_6 NVARCHAR(255) NULL,
+        charge_amount_6 DECIMAL(18,2) NULL,
+        charge_type_7 NVARCHAR(255) NULL,
+        charge_amount_7 DECIMAL(18,2) NULL,
+        charge_type_8 NVARCHAR(255) NULL,
+        charge_amount_8 DECIMAL(18,2) NULL,
+        billing_reference_1 NVARCHAR(255) NULL,
+        billing_reference_2 NVARCHAR(255) NULL,
+        customer_name NVARCHAR(255) NULL,
+        created_date DATETIME2 DEFAULT SYSDATETIME() NOT NULL,
 
-CREATE NONCLUSTERED INDEX IX_usps_modern_bill_tracking_number
-ON billing.usps_modern_bill (tracking_number, invoice_number, invoice_date);
+        CONSTRAINT PK_speedship_bill PRIMARY KEY (id),
+        CONSTRAINT FK_speedship_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+            REFERENCES billing.carrier_bill(carrier_bill_id)
+    );
 
-PRINT 'Created billing.usps_modern_bill';
+    CREATE NONCLUSTERED INDEX IX_speedship_bill_carrier_bill_id
+        ON billing.speedship_bill (carrier_bill_id);
 
-PRINT 'Migration complete: USPS Modern tables ready.';
+    CREATE NONCLUSTERED INDEX IX_speedship_bill_created_date
+        ON billing.speedship_bill (created_date);
+
+    CREATE NONCLUSTERED INDEX IX_speedship_bill_tracking_number_invoice
+        ON billing.speedship_bill (tracking_number, invoice_number, invoice_date);
+
+    PRINT 'Created billing.speedship_bill and indexes';
+END
+ELSE
+    PRINT 'billing.speedship_bill already exists — skipped';
+
+PRINT 'Migration complete.';
