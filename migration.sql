@@ -1,210 +1,108 @@
 /*
 ================================================================================
-Migration: ADF Bill Ingestion Schema Updates
+Migration: Add overlabel_tracking_number to dhl_bill
 ================================================================================
-Phase 1 — Promote resolution fields into silver bill tables (DHL, FedEx)
-Phase 2 — Speedship aggregator staging and silver tables
+Purpose: DHL Column 67 (overlabeled_value) contains an alternate tracking number
+         used by WMS for last-mile delivery. Previously discarded at the silver
+         layer, now carried through so tracking resolution can prefer it over the
+         Column 20 (domestic/international) logic when present.
 
-Idempotent: guarded by sys.columns / OBJECT_ID existence checks.
+Affected scripts (updated in this release):
+  - dhl_transform/Insert_ELT_&_CB.sql      (maps bronze → silver)
+  - dhl_transform/DHL_charges.sql           (vw_DHLCharges tracking resolution)
+  - dhl_transform/Insert_Unified_tables.sql (shipment_attributes tracking resolution)
+
+Idempotent: Safe to run multiple times.
 ================================================================================
 */
 
 SET NOCOUNT ON;
 
--- ============================================================
--- Phase 1: billing.dhl_bill
--- ============================================================
-
+-- Add overlabel_tracking_number column to dhl_bill (Col 67)
 IF NOT EXISTS (
-    SELECT 1 FROM sys.columns
-    WHERE object_id = OBJECT_ID('billing.dhl_bill') AND name = 'billing_ref1'
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('billing.dhl_bill')
+      AND name = 'overlabel_tracking_number'
 )
 BEGIN
-    ALTER TABLE billing.dhl_bill ADD billing_ref1 NVARCHAR(255) NULL;
-    PRINT 'Added billing.dhl_bill.billing_ref1';
+    ALTER TABLE billing.dhl_bill
+    ADD overlabel_tracking_number nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL;
+
+    PRINT 'Added overlabel_tracking_number to billing.dhl_bill';
 END
 ELSE
-    PRINT 'billing.dhl_bill.billing_ref1 already exists — skipped';
-
-IF NOT EXISTS (
-    SELECT 1 FROM sys.columns
-    WHERE object_id = OBJECT_ID('billing.dhl_bill') AND name = 'bol_number'
-)
 BEGIN
-    ALTER TABLE billing.dhl_bill ADD bol_number NVARCHAR(255) NULL;
-    PRINT 'Added billing.dhl_bill.bol_number';
+    PRINT 'Column overlabel_tracking_number already exists on billing.dhl_bill — skipped';
 END
-ELSE
-    PRINT 'billing.dhl_bill.bol_number already exists — skipped';
 
--- ============================================================
--- Phase 1: billing.fedex_bill
--- ============================================================
+-- Recreate vw_DHLCharges with updated tracking resolution (overlabel-preferred)
+IF OBJECT_ID('billing.vw_DHLCharges', 'V') IS NOT NULL
+    DROP VIEW billing.vw_DHLCharges;
+GO
 
-IF NOT EXISTS (
-    SELECT 1 FROM sys.columns
-    WHERE object_id = OBJECT_ID('billing.fedex_bill') AND name = 'original_customer_reference'
-)
-BEGIN
-    ALTER TABLE billing.fedex_bill ADD original_customer_reference NVARCHAR(255) NULL;
-    PRINT 'Added billing.fedex_bill.original_customer_reference';
-END
-ELSE
-    PRINT 'billing.fedex_bill.original_customer_reference already exists — skipped';
+CREATE VIEW billing.vw_DHLCharges
+AS
+SELECT
+    dhl.carrier_bill_id,
+    dhl.invoice_number,
+    CASE 
+        WHEN NULLIF(TRIM(dhl.overlabel_tracking_number), '') IS NOT NULL
+            THEN dhl.overlabel_tracking_number
+        WHEN UPPER(TRIM(dhl.recipient_country)) = 'US'
+            THEN dhl.domestic_tracking_number
+        ELSE dhl.international_tracking_number
+    END AS tracking_number,
+    dhl.created_date,
+    cb.file_id,
+    v.charge_type,
+    v.charge_amount
+FROM billing.dhl_bill dhl
+JOIN billing.carrier_bill cb ON cb.carrier_bill_id = dhl.carrier_bill_id
+OUTER APPLY (
+    VALUES
+        (N'Transportation Cost',            dhl.transportation_cost),
+        (N'Workshare Dropoff',              dhl.workshare_dropoff),
+        (N'Workshare Sort',                 dhl.workshare_sort),
+        (N'Workshare Stamp',                dhl.workshare_stamp),
+        (N'Workshare Machine',              dhl.workshare_machine),
+        (N'Workshare Manifest',             dhl.workshare_manifest),
+        (N'Workshare Bpm',                  dhl.workshare_bpm),
+        (N'Surcharge Content Endorse',      dhl.surcharge_content_endorse),
+        (N'Surcharge Unassignable Add',     dhl.surcharge_unassignable_add),
+        (N'Surcharge Special Handling',     dhl.surcharge_special_handling),
+        (N'Surcharge Late Arrival',         dhl.surcharge_late_arrival),
+        (N'Surcharge Usps Qualif',          dhl.surcharge_usps_qualif),
+        (N'Surcharge Client Srd',           dhl.surcharge_client_srd),
+        (N'Non-Qualified Dim',              dhl.non_qualified_dimensional_charges),
+        (N'Returned Mail Unassignable',     dhl.returned_mail_unassignable),
+        (N'Returned Mail Unprocessable',    dhl.returned_mail_unprocessable),
+        (N'Returned Mail Recall',           dhl.returned_mail_recall),
+        (N'Returned Mail Duplicate',        dhl.returned_mail_duplicate),
+        (N'Returned Mail Cont Assur',       dhl.returned_mail_cont_assur),
+        (N'Returned Mail Move Update',      dhl.returned_mail_move_update),
+        (N'Gst Tax',                        dhl.gst_tax),
+        (N'Hst Tax',                        dhl.hst_tax),
+        (N'Pst Tax',                        dhl.pst_tax),
+        (N'Vat Tax',                        dhl.vat_tax),
+        (N'Duties',                         dhl.duties),
+        (N'Other Tax',                      dhl.other_tax),
+        (N'Returned Mail Paper Invoice',    dhl.returned_mail_paper_invoice),
+        (N'Returned Mail Screening',        dhl.returned_mail_screening),
+        (N'Returned Mail Non Auto Flats',   dhl.returned_mail_non_auto_flats),
+        (N'Xb Customs Surcharge',           dhl.xb_customs_surcharge),
+        (N'Fuel Surcharge',                 dhl.fuel_surcharge_amount),
+        (N'Min Pickup Charge',              dhl.min_pickup_charge),
+        (N'Peak Surcharge',                 dhl.peak_surcharge),
+        (N'Broker Fee',                     dhl.broker_fee),
+        (N'Extra Length Surcharge',         dhl.extra_length_surcharge),
+        (N'Extra Volume Surcharge',         dhl.extra_volume_surcharge),
+        (N'Delivery Area Surcharge',        dhl.delivery_area_surcharge_amount),
+        (N'Dangerous Goods Charge',         dhl.dangerous_goods_charge)
+) v (charge_type, charge_amount)
+WHERE v.charge_amount IS NOT NULL
+  AND v.charge_amount <> 0;
+GO
 
--- ============================================================
--- Phase 2: Speedship delta + silver tables
--- ============================================================
-
-IF OBJECT_ID('billing.delta_speedship_bill', 'U') IS NULL
-BEGIN
-    CREATE TABLE billing.delta_speedship_bill (
-        [Customer #] VARCHAR(255) NULL,
-        [Invoice #] VARCHAR(255) NULL,
-        [Line of Business] VARCHAR(255) NULL,
-        [Airbill #] VARCHAR(255) NULL,
-        [Ship date] VARCHAR(255) NULL,
-        [PRO #] VARCHAR(255) NULL,
-        [BOL #] VARCHAR(255) NULL,
-        [SCAC] VARCHAR(255) NULL,
-        [Bill Type] VARCHAR(255) NULL,
-        [Shippers Name] VARCHAR(255) NULL,
-        [Shippers Address 1] VARCHAR(255) NULL,
-        [Shippers Address 2] VARCHAR(255) NULL,
-        [Shippers Address 3] VARCHAR(255) NULL,
-        [Shippers City] VARCHAR(255) NULL,
-        [Shippers State] VARCHAR(255) NULL,
-        [Shippers ZIP] VARCHAR(255) NULL,
-        [Receiver Name] VARCHAR(255) NULL,
-        [Receiver Address 1] VARCHAR(255) NULL,
-        [Receiver Address 2] VARCHAR(255) NULL,
-        [Receiver Address 3] VARCHAR(255) NULL,
-        [Receiver City] VARCHAR(255) NULL,
-        [Receiver State] VARCHAR(255) NULL,
-        [Receiver ZIP] VARCHAR(255) NULL,
-        [Consignee Name] VARCHAR(255) NULL,
-        [Consignee City] VARCHAR(255) NULL,
-        [Consignee State] VARCHAR(255) NULL,
-        [Consignee Zip] VARCHAR(255) NULL,
-        [Originating Customer] VARCHAR(255) NULL,
-        [Customer Name] VARCHAR(255) NULL,
-        [Customer Address 1] VARCHAR(255) NULL,
-        [Customer Address 2] VARCHAR(255) NULL,
-        [Customer City] VARCHAR(255) NULL,
-        [Customer State] VARCHAR(255) NULL,
-        [Customer ZIP] VARCHAR(255) NULL,
-        [Handling Unit] VARCHAR(255) NULL,
-        [Pieces] VARCHAR(255) NULL,
-        [Original Weight] VARCHAR(255) NULL,
-        [Charged Weight] VARCHAR(255) NULL,
-        [Class] VARCHAR(255) NULL,
-        [Charge Type 1] VARCHAR(255) NULL,
-        [Charge Amount 1] VARCHAR(255) NULL,
-        [Charge Type 2] VARCHAR(255) NULL,
-        [Charge Amount 2] VARCHAR(255) NULL,
-        [Charge Type 3] VARCHAR(255) NULL,
-        [Charge Amount 3] VARCHAR(255) NULL,
-        [Charge Type 4] VARCHAR(255) NULL,
-        [Charge Amount 4] VARCHAR(255) NULL,
-        [Charge Type 5] VARCHAR(255) NULL,
-        [Charge Amount 5] VARCHAR(255) NULL,
-        [Charge Type 6] VARCHAR(255) NULL,
-        [Charge Amount 6] VARCHAR(255) NULL,
-        [Charge Type 7] VARCHAR(255) NULL,
-        [Charge Amount 7] VARCHAR(255) NULL,
-        [Charge Type 8] VARCHAR(255) NULL,
-        [Charge Amount 8] VARCHAR(255) NULL,
-        [Charge Total] VARCHAR(255) NULL,
-        [Invoice Date] VARCHAR(255) NULL,
-        [Billing Reference 1] VARCHAR(255) NULL,
-        [Billing Reference 2] VARCHAR(255) NULL,
-        [Vendor Reference 1] VARCHAR(255) NULL,
-        [Vendor Reference 2] VARCHAR(255) NULL,
-        [Sent By] VARCHAR(255) NULL,
-        [Service level] VARCHAR(255) NULL,
-        [ Zone] VARCHAR(255) NULL,
-        [You Owe As] VARCHAR(255) NULL,
-        [Description1] VARCHAR(255) NULL,
-        [Description2] VARCHAR(255) NULL,
-        [Description3] VARCHAR(255) NULL,
-        [Description4] VARCHAR(255) NULL,
-        [Pickuplocation] VARCHAR(255) NULL,
-        [SenderNo] VARCHAR(255) NULL,
-        [ReceiverNo] VARCHAR(255) NULL,
-        [ReceiverLine1] VARCHAR(255) NULL,
-        [ReceiverLine2] VARCHAR(255) NULL,
-        [Package Reference 1] VARCHAR(255) NULL,
-        [Package Reference 2] VARCHAR(255) NULL,
-        [Package Reference 3] VARCHAR(255) NULL,
-        [Package Reference 4] VARCHAR(255) NULL,
-        [Package Reference 5] VARCHAR(255) NULL,
-        [Package Reference 6] VARCHAR(255) NULL,
-        [Package Reference 7] VARCHAR(255) NULL,
-        [Package Reference 8] VARCHAR(255) NULL,
-        [UPS #] VARCHAR(255) NULL
-    );
-    PRINT 'Created billing.delta_speedship_bill';
-END
-ELSE
-    PRINT 'billing.delta_speedship_bill already exists — skipped';
-
-IF OBJECT_ID('billing.speedship_bill', 'U') IS NULL
-BEGIN
-    CREATE TABLE billing.speedship_bill (
-        id INT IDENTITY(1,1) NOT NULL,
-        carrier_bill_id INT NULL,
-        invoice_number NVARCHAR(100) NOT NULL,
-        invoice_date DATE NOT NULL,
-        customer_number NVARCHAR(100) NULL,
-        line_of_business NVARCHAR(50) NULL,
-        tracking_number NVARCHAR(255) NOT NULL,
-        shipment_date DATE NULL,
-        scac NVARCHAR(255) NULL,
-        integrated_carrier NVARCHAR(100) NULL,
-        bill_type NVARCHAR(50) NULL,
-        service_level NVARCHAR(255) NULL,
-        destination_zone NVARCHAR(50) NULL,
-        charged_weight DECIMAL(18,6) NULL,
-        weight_unit NVARCHAR(10) NULL,
-        charge_total DECIMAL(18,2) NULL,
-        charge_type_1 NVARCHAR(255) NULL,
-        charge_amount_1 DECIMAL(18,2) NULL,
-        charge_type_2 NVARCHAR(255) NULL,
-        charge_amount_2 DECIMAL(18,2) NULL,
-        charge_type_3 NVARCHAR(255) NULL,
-        charge_amount_3 DECIMAL(18,2) NULL,
-        charge_type_4 NVARCHAR(255) NULL,
-        charge_amount_4 DECIMAL(18,2) NULL,
-        charge_type_5 NVARCHAR(255) NULL,
-        charge_amount_5 DECIMAL(18,2) NULL,
-        charge_type_6 NVARCHAR(255) NULL,
-        charge_amount_6 DECIMAL(18,2) NULL,
-        charge_type_7 NVARCHAR(255) NULL,
-        charge_amount_7 DECIMAL(18,2) NULL,
-        charge_type_8 NVARCHAR(255) NULL,
-        charge_amount_8 DECIMAL(18,2) NULL,
-        billing_reference_1 NVARCHAR(255) NULL,
-        billing_reference_2 NVARCHAR(255) NULL,
-        customer_name NVARCHAR(255) NULL,
-        created_date DATETIME2 DEFAULT SYSDATETIME() NOT NULL,
-
-        CONSTRAINT PK_speedship_bill PRIMARY KEY (id),
-        CONSTRAINT FK_speedship_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
-            REFERENCES billing.carrier_bill(carrier_bill_id)
-    );
-
-    CREATE NONCLUSTERED INDEX IX_speedship_bill_carrier_bill_id
-        ON billing.speedship_bill (carrier_bill_id);
-
-    CREATE NONCLUSTERED INDEX IX_speedship_bill_created_date
-        ON billing.speedship_bill (created_date);
-
-    CREATE NONCLUSTERED INDEX IX_speedship_bill_tracking_number_invoice
-        ON billing.speedship_bill (tracking_number, invoice_number, invoice_date);
-
-    PRINT 'Created billing.speedship_bill and indexes';
-END
-ELSE
-    PRINT 'billing.speedship_bill already exists — skipped';
-
-PRINT 'Migration complete.';
+PRINT 'Migration complete: DHL overlabel tracking number support enabled';
+GO
