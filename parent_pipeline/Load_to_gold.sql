@@ -179,6 +179,7 @@ BEGIN TRY
         ON sc.shipment_attribute_id = fs.shipment_attribute_id
     JOIN billing.carrier_bill AS cb
         ON cb.carrier_bill_id = sc.carrier_bill_id
+        AND cb.file_id = @File_id  -- Scope to current file; prevents cross-file fanout via shared shipment_attribute_id
     JOIN dbo.charge_types AS ct
         ON ct.charge_type_id = sc.charge_type_id
     JOIN dbo.charge_type_category AS ctc

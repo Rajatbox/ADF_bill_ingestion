@@ -399,6 +399,54 @@ DHL rows missing `WaybillNumber` or `ReceiverZipCode` are excluded from `bukushi
 
 ---
 
+## Shippo
+
+### Overview
+Shippo is a multi-carrier shipping aggregator. Billing data is exported from the Shippo dashboard as a label/transaction CSV with one row per label purchased. Each file covers a date range and contains both `SUCCESS` (label issued) and `ERROR` (failed label attempt) rows — only SUCCESS rows are processed.
+
+### Invoice Information
+- **Invoice Number**: Generated as `Shippo_yyyy-MM-dd` (from MAX object_created date — no invoice number in file)
+- **Invoice Date**: `MAX(object_created AS DATE)` — latest label date in the file
+- **Account Number**: `rate_carrier_account` column (UUID-style Shippo carrier account, column 18 → `Prop_17` in ADF)
+- **Invoice Grouping**: All SUCCESS rows in a file group into one `carrier_bill` record
+
+### Charge Structure
+**Single charge per label:**
+
+| Charge Name | Description | Freight Flag | Category |
+|-------------|-------------|--------------|----------|
+| **Base Rate** | Label rate charged by Shippo | freight=1 | Transportation (15) |
+
+**Seeded once in Sync_Reference_Data.sql Block 2. Static — no dynamic charge discovery.**
+
+### Integrated Carrier
+- **Source column**: `rate_provider` (e.g. `USPS`, `FedEx`)
+- Auto-discovered into `dbo.carrier` via Block 0 in Sync_Reference_Data.sql
+- Stored as `integrated_carrier_id` in `dbo.shipping_method` and `billing.shipment_attributes`
+
+### Shipping Method
+- **Source column**: `rate_servicelevel_name` (e.g. `Ground Advantage`, `First Class Package International Service`)
+- Auto-discovered per file via Block 1 in Sync_Reference_Data.sql
+- Stored with `integrated_carrier_id` FK from `rate_provider` lookup
+
+### Unit Conversions
+- **Weight**: `parcel_weight` + `parcel_mass_unit` — dynamic CASE (LB×16, KG×35.274, else as-is)
+- **Dimensions**: `parcel_length/width/height` + `parcel_distance_unit` — dynamic CASE (CM÷2.54, MM÷25.4, else as-is)
+- **Current export**: both unit columns are empty → weight/dims stored as NULL in unified layer
+
+### Schema
+- **Delta table**: `billing.delta_shippo_bill` (40 columns, all VARCHAR, 1:1 with CSV)
+- **Normalized table**: `billing.shippo_bill` (18 typed columns — no address fields, no label URLs)
+
+### Key Business Rules
+1. Only `status = 'SUCCESS'` rows processed — ERROR rows excluded (no tracking number)
+2. One invoice per file (synthetic bill_number, no invoice column in CSV)
+3. `rate_carrier_account` used as account number for ValidateCarrierInfo validation
+4. Single charge per shipment (`rate_amount` → Base Rate)
+5. Integrated carrier auto-discovered per file (no manual seeding needed)
+
+---
+
 ## Notes for Business Users
 
 - **Aggregators are not carriers**: They are middleware platforms that route shipments through actual carriers

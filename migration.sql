@@ -104,5 +104,85 @@ WHERE v.charge_amount IS NOT NULL
   AND v.charge_amount <> 0;
 GO
 
-PRINT 'Migration complete: DHL overlabel tracking number support enabled';
-GO
+-- ============================================================
+-- Phase 3: Shippo delta + silver tables
+-- ============================================================
+-- Note: Shippo export contains 24 columns — no from_*/to_* address columns.
+-- label_url is VARCHAR(MAX) because signed CloudFront URLs exceed 255 chars.
+
+IF OBJECT_ID('billing.delta_shippo_bill', 'U') IS NULL
+BEGIN
+    CREATE TABLE billing.delta_shippo_bill (
+        [object_id]               VARCHAR(255) NULL,
+        [object_created]          VARCHAR(255) NULL,
+        [object_updated]          VARCHAR(255) NULL,
+        [status]                  VARCHAR(255) NULL,
+        [tracking_number]         VARCHAR(255) NULL,
+        [tracking_status]         VARCHAR(255) NULL,
+        [tracking_url_provider]   VARCHAR(255) NULL,
+        [eta]                     VARCHAR(255) NULL,
+        [label_url]               VARCHAR(MAX)  NULL,
+        [label_file_type]         VARCHAR(255) NULL,
+        [metadata]                VARCHAR(255) NULL,
+        [test]                    VARCHAR(255) NULL,
+        [rate_amount]             VARCHAR(255) NULL,
+        [rate_currency]           VARCHAR(255) NULL,
+        [rate_provider]           VARCHAR(255) NULL,
+        [rate_servicelevel_name]  VARCHAR(255) NULL,
+        [rate_servicelevel_token] VARCHAR(255) NULL,
+        [rate_carrier_account]    VARCHAR(255) NULL,
+        [parcel_weight]           VARCHAR(255) NULL,
+        [parcel_length]           VARCHAR(255) NULL,
+        [parcel_width]            VARCHAR(255) NULL,
+        [parcel_height]           VARCHAR(255) NULL,
+        [parcel_distance_unit]    VARCHAR(255) NULL,
+        [parcel_mass_unit]        VARCHAR(255) NULL
+    );
+    PRINT 'Created billing.delta_shippo_bill';
+END
+ELSE
+    PRINT 'billing.delta_shippo_bill already exists — skipped';
+
+IF OBJECT_ID('billing.shippo_bill', 'U') IS NULL
+BEGIN
+    CREATE TABLE billing.shippo_bill (
+        id                      INT IDENTITY(1,1) NOT NULL,
+        carrier_bill_id         INT              NULL,
+        object_id               NVARCHAR(100)    NOT NULL,
+        object_created          DATETIME2        NULL,
+        tracking_number         NVARCHAR(255)    NULL,
+        tracking_status         NVARCHAR(50)     NULL,
+        rate_amount             DECIMAL(18,2)    NULL,
+        rate_currency           NVARCHAR(10)     NULL,
+        rate_provider           NVARCHAR(100)    NULL,
+        rate_servicelevel_name  NVARCHAR(255)    NULL,
+        rate_servicelevel_token NVARCHAR(255)    NULL,
+        rate_carrier_account    NVARCHAR(100)    NULL,
+        parcel_weight           DECIMAL(18,4)    NULL,
+        parcel_length           DECIMAL(18,4)    NULL,
+        parcel_width            DECIMAL(18,4)    NULL,
+        parcel_height           DECIMAL(18,4)    NULL,
+        parcel_distance_unit    NVARCHAR(10)     NULL,
+        parcel_mass_unit        NVARCHAR(10)     NULL,
+        created_date            DATETIME2        DEFAULT SYSDATETIME() NOT NULL,
+
+        CONSTRAINT PK_shippo_bill PRIMARY KEY (id),
+        CONSTRAINT FK_shippo_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+            REFERENCES billing.carrier_bill(carrier_bill_id)
+    );
+
+    CREATE NONCLUSTERED INDEX IX_shippo_bill_carrier_bill_id
+        ON billing.shippo_bill (carrier_bill_id);
+
+    CREATE NONCLUSTERED INDEX IX_shippo_bill_object_id
+        ON billing.shippo_bill (object_id);
+
+    CREATE NONCLUSTERED INDEX IX_shippo_bill_tracking_number
+        ON billing.shippo_bill (tracking_number);
+
+    PRINT 'Created billing.shippo_bill and indexes';
+END
+ELSE
+    PRINT 'billing.shippo_bill already exists — skipped';
+
+PRINT 'Migration complete.';

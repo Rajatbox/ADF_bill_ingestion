@@ -797,6 +797,125 @@ CREATE TABLE billing.delta_bukuship_bill (
     EnteredHeight               VARCHAR(50)  NULL
 );
 
+CREATE TABLE billing.delta_shipx_bill (
+    [Shipment Number]       VARCHAR(255) NULL,
+    [Tracking Number]       VARCHAR(255) NULL,
+    [Company Id]            VARCHAR(255) NULL,
+    [Order #]               VARCHAR(255) NULL,
+    [Warehouse Id]          VARCHAR(255) NULL,
+    [Pickup Company]        VARCHAR(255) NULL,
+    [Pickup Warehouse Name] VARCHAR(255) NULL,
+    [Pickup Address 1]      VARCHAR(255) NULL,
+    [Pickup City]           VARCHAR(255) NULL,
+    [Pickup State]          VARCHAR(255) NULL,
+    [Pickup Zip Code]       VARCHAR(255) NULL,
+    [Pickup Country]        VARCHAR(255) NULL,
+    [Delivery Name]         VARCHAR(255) NULL,
+    [Delivery Address 1]    VARCHAR(255) NULL,
+    [Delivery Address 2]    VARCHAR(255) NULL,
+    [Delivery City]         VARCHAR(255) NULL,
+    [Delivery State]        VARCHAR(255) NULL,
+    [Delivery Zip Code]     VARCHAR(255) NULL,
+    [Delivery Country]      VARCHAR(255) NULL,
+    [Package Count]         VARCHAR(255) NULL,
+    [Service Level]         VARCHAR(255) NULL,
+    [Zone]                  VARCHAR(255) NULL,
+    [Creation Date]         VARCHAR(255) NULL,
+    [Expected Ship Date]    VARCHAR(255) NULL,
+    [Actual Delivery Date]  VARCHAR(255) NULL,
+    [Fuel Surcharge]        VARCHAR(255) NULL,
+    [Delivery Charge]       VARCHAR(255) NULL,
+    [Total Charge]          VARCHAR(255) NULL,
+    [Status]                VARCHAR(255) NULL,
+    [Weight]                VARCHAR(255) NULL,
+    [Weight UOM]            VARCHAR(255) NULL,
+    [Length]                VARCHAR(255) NULL,
+    [Width]                 VARCHAR(255) NULL,
+    [Height]                VARCHAR(255) NULL,
+    [Dims UOM]              VARCHAR(255) NULL,
+    [Currency]              VARCHAR(255) NULL,
+    [Invoice Number]        VARCHAR(255) NULL,
+    [Invoice Date]          VARCHAR(255) NULL
+);
+
+-- VEHO DELTA TABLE
+-- 1:1 replica of Veho invoice CSV (38 columns, all VARCHAR).
+-- Three charge slots (Charge Name/Code/Amount 1-3) — only occupied slots carry data.
+-- Invoice Total contains commas (e.g., "9,266.78") — stripped before casting in transform.
+-- Created Timestamp format: "June 21, 2026, 6:18 AM" — parsed via CONVERT style 100.
+CREATE TABLE billing.delta_veho_bill (
+    [Client Name]            VARCHAR(255) NULL,
+    [Invoice Date]           VARCHAR(50)  NULL,
+    [Invoice Number]         VARCHAR(100) NULL,
+    [Total Rate]             VARCHAR(50)  NULL,
+    [Tracking ID]            VARCHAR(255) NULL,
+    [Package ID]             VARCHAR(255) NULL,
+    [Created Timestamp]      VARCHAR(100) NULL,   -- "June 21, 2026, 6:18 AM"
+    [Tendered Timestamp]     VARCHAR(100) NULL,
+    [Origin Zip]             VARCHAR(20)  NULL,
+    [Injection Market]       VARCHAR(100) NULL,
+    [Delivery Market]        VARCHAR(100) NULL,
+    [Delivery Zip]           VARCHAR(20)  NULL,
+    [Zone]                   VARCHAR(20)  NULL,
+    [Actual Weight]          VARCHAR(50)  NULL,   -- LB
+    [Billable Weight]        VARCHAR(50)  NULL,   -- LB
+    [Length]                 VARCHAR(50)  NULL,   -- IN
+    [Width]                  VARCHAR(50)  NULL,   -- IN
+    [Height]                 VARCHAR(50)  NULL,   -- IN
+    [External ID]            VARCHAR(255) NULL,
+    [Bar Code]               VARCHAR(255) NULL,
+    [Charge Name 1]          VARCHAR(255) NULL,
+    [Charge Code 1]          VARCHAR(50)  NULL,   -- GP, DAS, ADC, or other
+    [Charge Code 1 Amount]   VARCHAR(50)  NULL,
+    [Charge Name 2]          VARCHAR(255) NULL,
+    [Charge Code 2]          VARCHAR(50)  NULL,
+    [Charge Code 2 Amount]   VARCHAR(50)  NULL,
+    [Charge Name 3]          VARCHAR(255) NULL,
+    [Charge Code 3]          VARCHAR(50)  NULL,
+    [Charge Code 3 Amount]   VARCHAR(50)  NULL,
+    [Invoice Total]          VARCHAR(50)  NULL,   -- may contain commas, e.g. "9,266.78"
+    [Account Number]         VARCHAR(50)  NULL,   -- always "1123"
+    [Ship From Street]       VARCHAR(500) NULL,
+    [Ship From City]         VARCHAR(100) NULL,
+    [Ship From State]        VARCHAR(50)  NULL,
+    [Ship From Zip]          VARCHAR(20)  NULL,
+    [Ship To Street]         VARCHAR(500) NULL,
+    [Ship To City]           VARCHAR(100) NULL,
+    [Ship To State]          VARCHAR(50)  NULL,
+    [Ship To Zip]            VARCHAR(20)  NULL
+);
+
+-- SHIPPO DELTA TABLE
+-- 1:1 replica of Shippo label export CSV (40 columns, all VARCHAR).
+-- Only SUCCESS rows (status = 'SUCCESS') are processed — ERROR rows have no tracking number.
+-- object_created uses ISO 8601 format with Z suffix (e.g. 2026-06-29T12:51:54.133Z).
+-- parcel_weight/dimensions and unit columns are empty in current export; stored as NULL.
+CREATE TABLE billing.delta_shippo_bill (
+    [object_id]               VARCHAR(255) NULL,
+    [object_created]          VARCHAR(255) NULL,   -- ISO 8601 with Z suffix
+    [object_updated]          VARCHAR(255) NULL,
+    [status]                  VARCHAR(255) NULL,   -- SUCCESS or ERROR
+    [tracking_number]         VARCHAR(255) NULL,
+    [tracking_status]         VARCHAR(255) NULL,
+    [tracking_url_provider]   VARCHAR(255) NULL,
+    [eta]                     VARCHAR(255) NULL,
+    [label_url]               VARCHAR(MAX)  NULL,   -- signed CloudFront URLs exceed 255 chars
+    [label_file_type]         VARCHAR(255) NULL,
+    [metadata]                VARCHAR(255) NULL,
+    [test]                    VARCHAR(255) NULL,
+    [rate_amount]             VARCHAR(255) NULL,
+    [rate_currency]           VARCHAR(255) NULL,
+    [rate_provider]           VARCHAR(255) NULL,   -- Integrated carrier (USPS, FedEx, etc.)
+    [rate_servicelevel_name]  VARCHAR(255) NULL,   -- Shipping method
+    [rate_servicelevel_token] VARCHAR(255) NULL,
+    [rate_carrier_account]    VARCHAR(255) NULL,   -- Account number (Prop_17 in ADF)
+    [parcel_weight]           VARCHAR(255) NULL,
+    [parcel_length]           VARCHAR(255) NULL,
+    [parcel_width]            VARCHAR(255) NULL,
+    [parcel_height]           VARCHAR(255) NULL,
+    [parcel_distance_unit]    VARCHAR(255) NULL,
+    [parcel_mass_unit]        VARCHAR(255) NULL
+);
 
 /*
 ================================================================================
@@ -1296,6 +1415,189 @@ ON billing.passport_bill (created_date);
 CREATE NONCLUSTERED INDEX IX_passport_bill_tracking_number
 ON billing.passport_bill (tracking_number, invoice_number, invoice_date);
 
+
+-- USPS MODERN BILL TABLE (Normalized carrier bill line items)
+-- Source: ShipHero label API export. One row per shipment.
+-- Weight stored in raw LB; converted to OZ in Insert_Unified_tables.sql.
+-- Dimensions already in inches; stored as-is.
+CREATE TABLE billing.usps_modern_bill (
+    id                      INT IDENTITY(1,1)   NOT NULL,
+    carrier_bill_id         INT                 NULL,
+    invoice_number          NVARCHAR(100)       NOT NULL,
+    invoice_date            DATE                NOT NULL,
+    tracking_number         NVARCHAR(255)       NOT NULL,
+    label_id                NVARCHAR(255)       NULL,
+    label_legacy_id         NVARCHAR(255)       NULL,
+    order_number            NVARCHAR(255)       NULL,
+    order_account_id        NVARCHAR(255)       NULL,
+    shipment_created_date   DATETIME2           NULL,
+    label_created_date      DATETIME2           NULL,   -- used as ship date
+    shipping_method         NVARCHAR(255)       NULL,
+    billed_weight_lb        DECIMAL(18,4)       NULL,   -- raw LB; convert × 16 in unified layer
+    billed_height_in        DECIMAL(18,4)       NULL,
+    billed_length_in        DECIMAL(18,4)       NULL,
+    billed_width_in         DECIMAL(18,4)       NULL,
+    cost                    DECIMAL(18,2)       NULL,   -- charge ingested as "Freight charge"
+    status                  NVARCHAR(50)        NULL,
+    box_name                NVARCHAR(255)       NULL,
+    carrier_account_id      NVARCHAR(255)       NULL,
+    warehouse               NVARCHAR(255)       NULL,
+    created_date            DATETIME2           DEFAULT sysdatetime() NOT NULL,
+
+    CONSTRAINT PK_usps_modern_bill PRIMARY KEY (id),
+    CONSTRAINT FK_usps_modern_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+        REFERENCES billing.carrier_bill(carrier_bill_id)
+);
+
+-- Index for FK lookup performance (join with carrier_bill)
+CREATE NONCLUSTERED INDEX IX_usps_modern_bill_carrier_bill_id
+ON billing.usps_modern_bill (carrier_bill_id);
+
+-- Composite index for tracking number lookups
+CREATE NONCLUSTERED INDEX IX_usps_modern_bill_tracking_number
+ON billing.usps_modern_bill (tracking_number, invoice_number, invoice_date);
+
+CREATE TABLE billing.shipx_bill (
+    id                      INT IDENTITY(1,1)   NOT NULL,
+    carrier_bill_id         INT                 NULL,
+    invoice_number          NVARCHAR(100)       NOT NULL,
+    invoice_date            DATE                NOT NULL,
+    tracking_number         NVARCHAR(255)       NOT NULL,
+    shipment_number         NVARCHAR(255)       NULL,
+    company_id              NVARCHAR(100)       NULL,
+    service_level           NVARCHAR(255)       NULL,
+    destination_zone        NVARCHAR(100)       NULL,
+    shipment_date           DATETIME2           NULL,   -- Creation Date
+    actual_delivery_date    DATETIME2           NULL,
+    weight                  DECIMAL(18,4)       NULL,
+    weight_uom              NVARCHAR(10)        NULL,
+    length                  DECIMAL(18,4)       NULL,
+    width                   DECIMAL(18,4)       NULL,
+    height                  DECIMAL(18,4)       NULL,
+    dims_uom                NVARCHAR(10)        NULL,
+    fuel_surcharge          DECIMAL(18,2)       NULL,
+    delivery_charge         DECIMAL(18,2)       NULL,
+    total_charge            DECIMAL(18,2)       NULL,
+    currency                NVARCHAR(10)        NULL,
+    status                  NVARCHAR(100)       NULL,
+    created_date            DATETIME2           DEFAULT SYSDATETIME() NOT NULL,
+
+    CONSTRAINT PK_shipx_bill PRIMARY KEY (id),
+    CONSTRAINT FK_shipx_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+        REFERENCES billing.carrier_bill(carrier_bill_id)
+);
+
+CREATE NONCLUSTERED INDEX IX_shipx_bill_carrier_bill_id
+ON billing.shipx_bill (carrier_bill_id);
+
+CREATE NONCLUSTERED INDEX IX_shipx_bill_tracking_number
+ON billing.shipx_bill (tracking_number, invoice_number, invoice_date);
+
+
+-- VEHO BILL TABLE (Normalized carrier bill line items)
+-- One row per Tracking ID. Three charge slots preserved as typed columns.
+-- Weight stored in LB (raw); converted × 16 → OZ in Insert_Unified_tables.sql.
+-- Dimensions stored in IN (as-is from CSV — no conversion needed).
+-- shipping_method: derived from [Charge Name 1] when [Charge Code 1] != 'ADC'; NULL otherwise.
+CREATE TABLE billing.veho_bill (
+    id                  INT IDENTITY(1,1)   NOT NULL,
+    carrier_bill_id     INT                 NULL,
+    invoice_date        DATE                NOT NULL,
+    invoice_number      NVARCHAR(100)       NOT NULL,
+    tracking_id         NVARCHAR(255)       NOT NULL,
+    package_id          NVARCHAR(255)       NULL,
+    shipment_date       DATETIME            NULL,   -- Created Timestamp (date + time)
+    tendered_timestamp  DATETIME            NULL,   -- Tendered Timestamp
+    origin_zip          NVARCHAR(20)        NULL,
+    injection_market    NVARCHAR(100)       NULL,
+    delivery_market     NVARCHAR(100)       NULL,
+    delivery_zip        NVARCHAR(20)        NULL,
+    [zone]              INT                 NULL,
+    actual_weight_lb    DECIMAL(18,4)       NULL,   -- raw LB
+    billable_weight_lb  DECIMAL(18,4)       NULL,   -- raw LB; convert × 16 in unified layer
+    dim_length_in       DECIMAL(18,4)       NULL,   -- IN
+    dim_width_in        DECIMAL(18,4)       NULL,   -- IN
+    dim_height_in       DECIMAL(18,4)       NULL,   -- IN
+    external_id         NVARCHAR(255)       NULL,
+    bar_code            NVARCHAR(255)       NULL,
+    total_rate          DECIMAL(18,2)       NULL,
+    invoice_total       DECIMAL(18,2)       NULL,
+    account_number      NVARCHAR(50)        NULL,
+    shipping_method     NVARCHAR(255)       NULL,   -- NULL when Charge Code 1 = 'ADC'
+    charge_name_1       NVARCHAR(255)       NULL,
+    charge_code_1       NVARCHAR(50)        NULL,
+    charge_amount_1     DECIMAL(18,2)       NULL,
+    charge_name_2       NVARCHAR(255)       NULL,
+    charge_code_2       NVARCHAR(50)        NULL,
+    charge_amount_2     DECIMAL(18,2)       NULL,
+    charge_name_3       NVARCHAR(255)       NULL,
+    charge_code_3       NVARCHAR(50)        NULL,
+    charge_amount_3     DECIMAL(18,2)       NULL,
+    ship_from_street    NVARCHAR(500)       NULL,
+    ship_from_city      NVARCHAR(100)       NULL,
+    ship_from_state     NVARCHAR(50)        NULL,
+    ship_from_zip       NVARCHAR(20)        NULL,
+    ship_to_street      NVARCHAR(500)       NULL,
+    ship_to_city        NVARCHAR(100)       NULL,
+    ship_to_state       NVARCHAR(50)        NULL,
+    ship_to_zip         NVARCHAR(20)        NULL,
+    created_date        DATETIME2           DEFAULT SYSDATETIME() NOT NULL,
+
+    CONSTRAINT PK_veho_bill PRIMARY KEY (id),
+    CONSTRAINT FK_veho_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+        REFERENCES billing.carrier_bill(carrier_bill_id)
+);
+
+-- Index for FK lookup performance (join with carrier_bill)
+CREATE NONCLUSTERED INDEX IX_veho_bill_carrier_bill_id
+ON billing.veho_bill (carrier_bill_id);
+
+-- Index for incremental processing (used by Insert_Unified_tables.sql)
+CREATE NONCLUSTERED INDEX IX_veho_bill_created_date
+ON billing.veho_bill (created_date);
+
+-- Composite index for tracking number lookups
+CREATE NONCLUSTERED INDEX IX_veho_bill_tracking_number
+ON billing.veho_bill (tracking_id, invoice_number, invoice_date);
+
+-- SHIPPO BILL TABLE (Normalized carrier bill line items)
+-- One row per successful label purchase. Only status = 'SUCCESS' rows from delta_shippo_bill.
+-- object_created stored as DATETIME2 (Z suffix stripped during Insert_ELT_&_CB.sql).
+-- parcel_weight/dimensions and unit columns are NULL when omitted from export.
+-- rate_provider = integrated carrier name (e.g. USPS) — used for shipping_method FK resolution.
+CREATE TABLE billing.shippo_bill (
+    id                      INT IDENTITY(1,1) NOT NULL,
+    carrier_bill_id         INT              NULL,
+    object_id               NVARCHAR(100)    NOT NULL,   -- Shippo label UUID
+    object_created          DATETIME2        NULL,
+    tracking_number         NVARCHAR(255)    NULL,
+    tracking_status         NVARCHAR(50)     NULL,
+    rate_amount             DECIMAL(18,2)    NULL,
+    rate_currency           NVARCHAR(10)     NULL,
+    rate_provider           NVARCHAR(100)    NULL,       -- Integrated carrier (USPS, FedEx, etc.)
+    rate_servicelevel_name  NVARCHAR(255)    NULL,       -- Shipping method name
+    rate_servicelevel_token NVARCHAR(255)    NULL,
+    rate_carrier_account    NVARCHAR(100)    NULL,
+    parcel_weight           DECIMAL(18,4)    NULL,
+    parcel_length           DECIMAL(18,4)    NULL,
+    parcel_width            DECIMAL(18,4)    NULL,
+    parcel_height           DECIMAL(18,4)    NULL,
+    parcel_distance_unit    NVARCHAR(10)     NULL,
+    parcel_mass_unit        NVARCHAR(10)     NULL,
+    created_date            DATETIME2        DEFAULT SYSDATETIME() NOT NULL,
+    CONSTRAINT PK_shippo_bill PRIMARY KEY (id),
+    CONSTRAINT FK_shippo_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+        REFERENCES billing.carrier_bill(carrier_bill_id)
+);
+
+CREATE NONCLUSTERED INDEX IX_shippo_bill_carrier_bill_id
+ON billing.shippo_bill (carrier_bill_id);
+
+CREATE NONCLUSTERED INDEX IX_shippo_bill_object_id
+ON billing.shippo_bill (object_id);
+
+CREATE NONCLUSTERED INDEX IX_shippo_bill_tracking_number
+ON billing.shippo_bill (tracking_number);
 
 /*
 ================================================================================
