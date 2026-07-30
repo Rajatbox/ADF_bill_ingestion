@@ -150,13 +150,14 @@ BEGIN TRY
     WHEN MATCHED THEN
         UPDATE SET
             -- Physical attributes: UPS may issue corrections for weight/dimensions/zone
+            shipping_method = COALESCE(source.shipping_method, target.shipping_method),
             billed_weight_oz = COALESCE(source.billed_weight_oz, target.billed_weight_oz),
             billed_length_in = COALESCE(source.billed_length_in, target.billed_length_in),
             billed_width_in = COALESCE(source.billed_width_in, target.billed_width_in),
             billed_height_in = COALESCE(source.billed_height_in, target.billed_height_in),
             destination_zone = COALESCE(source.destination_zone, target.destination_zone),
             updated_date = SYSDATETIME();
-            -- Note: shipping_method and shipment_date are master attributes (set once, never change)
+            -- Note: shipment_date is a master attribute (set once, never changes)
 
     SET @ShipmentsInserted = @@ROWCOUNT;
 
