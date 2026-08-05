@@ -72,7 +72,7 @@ BEGIN TRY
     )
     SELECT
         @Carrier_id AS carrier_id,
-        d.AccountNumber AS bill_number,
+        d.AccountNumber + '_' + FORMAT(CAST(d.InvoiceDate AS DATE), 'ddMMyy') AS bill_number,
         CAST(d.InvoiceDate AS DATE) AS bill_date,
         SUM(CAST(d.NetCost AS DECIMAL(18,2))) AS total_amount,
         COUNT(DISTINCT
@@ -171,7 +171,7 @@ BEGIN TRY
 
     FROM billing.delta_bukuship_bill d
     INNER JOIN billing.carrier_bill cb
-        ON cb.bill_number = d.AccountNumber
+        ON cb.bill_number = d.AccountNumber + '_' + FORMAT(CAST(d.InvoiceDate AS DATE), 'ddMMyy')
         AND cb.bill_date  = CAST(d.InvoiceDate AS DATE)
         AND cb.carrier_id = @Carrier_id
     WHERE NULLIF(TRIM(d.AccountNumber), '') IS NOT NULL
