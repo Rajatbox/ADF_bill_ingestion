@@ -177,7 +177,6 @@ BEGIN TRY
     WHERE NULLIF(TRIM(d.AccountNumber), '') IS NOT NULL
       AND NULLIF(TRIM(d.InvoiceDate), '') IS NOT NULL
       AND NULLIF(TRIM(d.NetCost), '') IS NOT NULL
-      AND NULLIF(TRIM(d.TrackingNumber), '') IS NOT NULL
       AND (LOWER(d.CarrierName) NOT LIKE '%dhl%' OR NULLIF(TRIM(d.ReceiverZipCode), '') IS NOT NULL)
       AND NOT EXISTS (
             SELECT 1

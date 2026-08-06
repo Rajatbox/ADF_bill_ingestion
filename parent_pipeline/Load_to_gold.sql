@@ -24,7 +24,7 @@ Performance:
 
 SET NOCOUNT ON;
 
-DECLARE @ShipmentsUpdated INT, @PackagesUpdated INT, @LedgerInserted INT, @MarkupsInserted INT;
+DECLARE @ShipmentsUpdated INT, @PackagesUpdated INT, @LedgerInserted INT, @MarkupsInserted INT, @InvoiceChargesInserted INT;
 
 -- CTE scopes to distinct shipment_attribute_ids for this file and carrier.
 -- Driving from sa_id (not shipment_charges directly) avoids the sc fanout —
@@ -196,13 +196,73 @@ BEGIN TRY
             WHERE ccl.shipment_attribute_id = sc.shipment_attribute_id
                 AND ccl.carrier_bill_id = sc.carrier_bill_id
                 AND ccl.charge_type_id = sc.charge_type_id
-        );
+        )
+      AND NULLIF(fs.tracking_number, '') IS NOT NULL;  -- invoice-level charges handled in Part 4
 
     SET @LedgerInserted = @@ROWCOUNT;
 
     /*
     ================================================================================
-    Part 4: Sync shipping methods with default markups
+    Part 4: Insert invoice-level (null-tracking) charges into cost ledger
+    ================================================================================
+    Reads directly from billing.shipment_charges for rows where tracking_number
+    IS NULL (routed to the 'Service_charges' sentinel during ingestion).
+    Bypasses #FileShipments — no WMS resolution is possible for these rows.
+    ================================================================================
+    */
+    INSERT INTO dbo.carrier_cost_ledger (
+        carrier_invoice_number,
+        carrier_invoice_date,
+        tracking_number,
+        shipment_date,
+        carrier_id,
+        shipping_method_id,
+        category,
+        cost_item,
+        amount,
+        charge_type_id,
+        shipment_package_id,
+        carrier_bill_id,
+        shipment_attribute_id,
+        status
+    )
+    SELECT
+        cb.bill_number,
+        cb.bill_date,
+        NULL,
+        NULL,
+        sc.carrier_id,
+        NULL,
+        ctc.category,
+        ct.charge_name,
+        sc.amount,
+        sc.charge_type_id,
+        NULL,
+        sc.carrier_bill_id,
+        sc.shipment_attribute_id,
+        'unknown'
+    FROM billing.shipment_charges sc
+    JOIN billing.carrier_bill cb
+        ON  cb.carrier_bill_id = sc.carrier_bill_id
+        AND cb.file_id         = @File_id
+    JOIN dbo.charge_types ct
+        ON  ct.charge_type_id  = sc.charge_type_id
+    JOIN dbo.charge_type_category ctc
+        ON  ctc.category_id    = ct.charge_category_id
+    WHERE sc.carrier_id        = @Carrier_id
+      AND sc.tracking_number IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM dbo.carrier_cost_ledger ccl
+          WHERE ccl.carrier_bill_id      = sc.carrier_bill_id
+            AND ccl.charge_type_id       = sc.charge_type_id
+            AND ccl.tracking_number IS NULL
+      );
+
+    SET @InvoiceChargesInserted = @@ROWCOUNT;
+
+    /*
+    ================================================================================
+    Part 5: Sync shipping methods with default markups
     ================================================================================
     Ensures all shipping methods have a default markup entry in global_carrier_markups.
     Uses the latest active default markup from default_markups table.
@@ -242,11 +302,12 @@ BEGIN TRY
 
     SET @MarkupsInserted = @@ROWCOUNT;
 
-    SELECT 
+    SELECT
         'SUCCESS' AS Status,
         @ShipmentsUpdated AS ShipmentsUpdated,
         @PackagesUpdated AS PackagesUpdated,
         @LedgerInserted AS LedgerInserted,
+        @InvoiceChargesInserted AS InvoiceChargesInserted,
         @MarkupsInserted AS MarkupsInserted;
 
 END TRY

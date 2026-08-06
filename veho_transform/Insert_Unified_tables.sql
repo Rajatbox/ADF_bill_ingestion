@@ -175,7 +175,7 @@ BEGIN TRY
 
         -- Join to get shipment_attribute_id
         INNER JOIN billing.shipment_attributes AS sa
-            ON sa.tracking_number = vb.tracking_id
+            ON sa.tracking_number = ISNULL(vb.tracking_id, 'Service_charges')
             AND sa.carrier_id = @Carrier_id
     WHERE
         cb.file_id = @File_id    -- File-based filtering

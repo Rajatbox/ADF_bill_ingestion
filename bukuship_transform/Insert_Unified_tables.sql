@@ -186,10 +186,9 @@ BEGIN TRY
         ON ct.charge_name  = bb.charge_name
         AND ct.carrier_id  = @Carrier_id
     INNER JOIN billing.shipment_attributes sa
-        ON sa.tracking_number = bb.tracking_number
+        ON sa.tracking_number = ISNULL(bb.tracking_number, 'Service_charges')
         AND sa.carrier_id     = @Carrier_id
     WHERE cb.file_id = @File_id
-      AND NULLIF(TRIM(bb.tracking_number), '') IS NOT NULL
       AND bb.net_cost IS NOT NULL
       AND bb.net_cost <> 0
       AND NOT EXISTS (

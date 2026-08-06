@@ -2171,4 +2171,16 @@ weight_audit AS (
         END AS weight_variance_percent
     FROM cost_audit
 )
+
+-----------------------------------------------------------------------------------------------------------------
+-- Service Charges: Make carrier_id nullable on shipment_attributes
+-- Required for the sentinel row (tracking_number = 'Service_charges', carrier_id = NULL)
+-----------------------------------------------------------------------------------------------------------------
+ALTER TABLE billing.shipment_attributes
+ALTER COLUMN carrier_id INT NULL;
+
+-- Seed the sentinel row for invoice-level (null-tracking) charges
+-- One permanent row; all null-tracking charges across all carriers point to this id via FK.
+INSERT INTO billing.shipment_attributes (carrier_id, tracking_number, created_date, updated_date)
+VALUES (NULL, 'Service_charges', GETUTCDATE(), GETUTCDATE());
 SELECT * FROM weight_audit WHERE is_cost_exception = 1;

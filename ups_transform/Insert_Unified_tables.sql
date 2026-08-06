@@ -200,7 +200,7 @@ BEGIN TRY
         billing.ups_bill AS ub
     INNER JOIN billing.shipment_attributes AS sa
         ON sa.carrier_id = @carrier_id
-        AND sa.tracking_number = ub.tracking_number
+        AND sa.tracking_number = ISNULL(ub.tracking_number, 'Service_charges')
     INNER JOIN billing.carrier_bill AS cb
         ON cb.carrier_id = @carrier_id
         AND cb.bill_number = ub.invoice_number
