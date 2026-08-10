@@ -78,7 +78,7 @@ BEGIN TRY
         COUNT(DISTINCT
             CASE
                 WHEN LOWER(d.CarrierName) LIKE '%dhl%'
-                    THEN '420' + d.ReceiverZipCode + d.TrackingNumber
+                    THEN '420' + RIGHT('0' + LEFT(REPLACE(d.ReceiverZipCode, ' ', ''), 5), 5) + d.TrackingNumber
                 ELSE d.TrackingNumber
             END
         ) AS num_shipments,
@@ -143,7 +143,7 @@ BEGIN TRY
         -- Tracking number: DHL uses constructed key, others use TrackingNumber
         CASE
             WHEN LOWER(d.CarrierName) LIKE '%dhl%'
-                THEN '420' + d.ReceiverZipCode + d.TrackingNumber
+                THEN '420' + RIGHT('0' + LEFT(REPLACE(d.ReceiverZipCode, ' ', ''), 5), 5) + d.TrackingNumber
             ELSE d.TrackingNumber
         END AS tracking_number,
 

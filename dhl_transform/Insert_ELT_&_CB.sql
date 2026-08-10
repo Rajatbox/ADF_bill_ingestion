@@ -223,7 +223,7 @@ BEGIN TRY
         CAST(NULLIF(TRIM(d.invoice_date), '') AS date) AS invoice_date,
         CAST(NULLIF(TRIM(d.pickup_date), '') AS date) AS shipping_date,
         TRIM(CAST(d.customer_confirm AS nvarchar(255))),
-        '420' + LEFT(REPLACE(CAST(d.recipient_zip AS varchar(50)), ' ', ''), 5)
+        '420' + RIGHT('0' + LEFT(REPLACE(CAST(d.recipient_zip AS varchar(50)), ' ', ''), 5), 5)
              + TRIM(CAST(d.delivery_confirm AS varchar(255))) AS domestic_tracking_number,
         CAST(d.recipient_zip AS nvarchar(255)),
         CAST(d.recipient_country AS nvarchar(10)),
@@ -267,7 +267,7 @@ BEGIN TRY
         CAST(NULLIF(TRIM(d.surcharge_fuel), '') AS decimal(18,2)),
         CAST(NULLIF(TRIM(d.min_pickup_charge), '') AS decimal(18,2)),
         CASE WHEN NULLIF(TRIM(CAST(d.overlabeled_value AS varchar(255))), '') IS NOT NULL
-             THEN '420' + LEFT(REPLACE(CAST(d.recipient_zip AS varchar(50)), ' ', ''), 5)
+             THEN '420' + RIGHT('0' + LEFT(REPLACE(CAST(d.recipient_zip AS varchar(50)), ' ', ''), 5), 5)
                         + TRIM(CAST(d.overlabeled_value AS varchar(255)))
         END AS overlabel_tracking_number,
         CAST(NULLIF(TRIM(d.peak_surcharge), '') AS decimal(18,2)),
