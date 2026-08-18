@@ -144,7 +144,7 @@ BEGIN TRY
             AND ct.carrier_id = @Carrier_id
         INNER JOIN
             billing.shipment_attributes sa
-            ON sa.carrier_id = @Carrier_id
+            ON ISNULL(sa.carrier_id, @Carrier_id) = @Carrier_id
             AND sa.tracking_number = ISNULL(v.tracking_number, 'Service_charges')
         WHERE 
             v.file_id = @File_id
