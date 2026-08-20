@@ -885,6 +885,35 @@ CREATE TABLE billing.delta_veho_bill (
     [Ship To Zip]            VARCHAR(20)  NULL
 );
 
+-- USPS DELTA TABLE
+-- 1:1 replica of USPS EPS billing export CSV (21 columns, all VARCHAR).
+-- Narrow format: one row per charge event (tranType = PURCHASE/ADJUSTMENT/REFUND).
+-- No weight/dimension columns in this feed — no unit conversion applies.
+-- permit_number/permit_type/permit_finance_number are always empty in observed exports.
+CREATE TABLE billing.delta_usps_bill (
+    ach_debit_trans_id      VARCHAR(50)  NULL,
+    ach_withdrawal_amount   VARCHAR(50)  NULL,
+    eps_acct_num            VARCHAR(50)  NULL,
+    eps_tran_id             VARCHAR(50)  NULL,
+    tran_amt                VARCHAR(50)  NULL,
+    tran_date               VARCHAR(50)  NULL,
+    tran_type               VARCHAR(50)  NULL,   -- PURCHASE, ADJUSTMENT, REFUND
+    efn                     VARCHAR(100) NULL,
+    pic                     VARCHAR(255) NULL,   -- tracking number
+    postage                 VARCHAR(50)  NULL,   -- charge amount
+    crid                    VARCHAR(50)  NULL,
+    master_mid              VARCHAR(50)  NULL,
+    permit_number           VARCHAR(50)  NULL,   -- always empty in observed exports
+    permit_type             VARCHAR(50)  NULL,   -- always empty in observed exports
+    permit_finance_number   VARCHAR(50)  NULL,   -- always empty in observed exports
+    assessment_type         VARCHAR(100) NULL,
+    assessment_details      VARCHAR(255) NULL,
+    cust_ref_num1           VARCHAR(100) NULL,
+    cust_ref_num2           VARCHAR(100) NULL,
+    mail_class              VARCHAR(20)  NULL,
+    dispute_id              VARCHAR(50)  NULL
+);
+
 -- SHIPPO DELTA TABLE
 -- 1:1 replica of Shippo label export CSV (40 columns, all VARCHAR).
 -- Only SUCCESS rows (status = 'SUCCESS') are processed — ERROR rows have no tracking number.
@@ -1559,6 +1588,41 @@ ON billing.veho_bill (created_date);
 -- Composite index for tracking number lookups
 CREATE NONCLUSTERED INDEX IX_veho_bill_tracking_number
 ON billing.veho_bill (tracking_id, invoice_number, invoice_date);
+
+-- USPS BILL TABLE (Normalized carrier bill line items)
+-- One row per delta_usps_bill row (narrow format, one charge event per row).
+-- cust_ref_num1/2 retained (order/reference reconciliation). Excluded: ach_debit_trans_id,
+-- ach_withdrawal_amount, efn, crid, master_mid, permit_*, dispute_id — not used downstream
+-- (see delta_usps_bill for raw data if ever needed).
+CREATE TABLE billing.usps_bill (
+    id                  INT IDENTITY(1,1)   NOT NULL,
+    carrier_bill_id     INT                 NULL,
+    eps_acct_num        NVARCHAR(50)        NOT NULL,
+    eps_tran_id         NVARCHAR(50)        NOT NULL,
+    tran_amt            DECIMAL(18,2)       NOT NULL,
+    tran_date           DATETIME2           NOT NULL,
+    tran_type           NVARCHAR(50)        NOT NULL,   -- PURCHASE, ADJUSTMENT, REFUND
+    tracking_number     NVARCHAR(255)       NOT NULL,   -- CSV column: pic
+    postage             DECIMAL(18,2)       NOT NULL,   -- charge amount
+    assessment_type     NVARCHAR(100)       NULL,
+    assessment_details  NVARCHAR(255)       NULL,
+    cust_ref_num1       NVARCHAR(100)       NULL,
+    cust_ref_num2       NVARCHAR(100)       NULL,
+    mail_class          NVARCHAR(20)        NULL,
+    created_date        DATETIME2           DEFAULT SYSDATETIME() NOT NULL,
+
+    CONSTRAINT PK_usps_bill PRIMARY KEY (id),
+    CONSTRAINT FK_usps_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+        REFERENCES billing.carrier_bill(carrier_bill_id)
+);
+
+-- Index for FK lookup performance (join with carrier_bill)
+CREATE NONCLUSTERED INDEX IX_usps_bill_carrier_bill_id
+ON billing.usps_bill (carrier_bill_id);
+
+-- Composite index for tracking number / event lookups
+CREATE NONCLUSTERED INDEX IX_usps_bill_eps_tran_tracking_number
+ON billing.usps_bill (eps_tran_id, tracking_number);
 
 -- SHIPPO BILL TABLE (Normalized carrier bill line items)
 -- One row per successful label purchase. Only status = 'SUCCESS' rows from delta_shippo_bill.

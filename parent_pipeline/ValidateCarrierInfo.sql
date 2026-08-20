@@ -30,6 +30,7 @@ DECLARE @ActualAccountInFile NVARCHAR(100) = CASE
     WHEN @InputCarrier = 'flavor cloud' THEN JSON_VALUE(@RawJson, '$.Prop_6')  -- Column 7: Origin Location
     WHEN @InputCarrier = 'passport' THEN JSON_VALUE(@RawJson, '$.Prop_7')  -- Column 8: Shipper Company
     WHEN @InputCarrier = 'usps_modern' THEN 'Shiphero'                    -- constant; account not in file
+    WHEN @InputCarrier = 'usps'       THEN 'Transaction'                  -- constant; static placeholder for now
     WHEN @InputCarrier = 'shipx'      THEN JSON_VALUE(@RawJson, '$.Prop_2')   -- Column 3: Company Id
     WHEN @InputCarrier = 'veho'       THEN JSON_VALUE(@RawJson, '$.Prop_30')  -- Column 31: Account Number
     WHEN @InputCarrier = 'shippo'     THEN JSON_VALUE(@RawJson, '$.Prop_17')  -- Column 18: rate_carrier_account
