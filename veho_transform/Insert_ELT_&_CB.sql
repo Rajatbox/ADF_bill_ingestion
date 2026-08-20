@@ -173,13 +173,27 @@ BEGIN TRY
         CAST(NULLIF(TRIM(d.[Total Rate]), '') AS DECIMAL(18,2)) AS total_rate,
         CAST(REPLACE(TRIM(d.[Invoice Total]), ',', '') AS DECIMAL(18,2)) AS invoice_total,
         CAST(TRIM(d.[Account Number]) AS NVARCHAR(50)) AS account_number,
-        -- shipping_method: derived from Charge Name 1 when Charge Code 1 is NOT 'ADC'
+        -- shipping_method: derived from Charge Name 1 when Charge Code 1 is NOT 'ADC'.
+        -- Veho omits the charge label for the base delivery fee in newer bills; default to Ground Plus.
         CASE
             WHEN UPPER(TRIM(d.[Charge Code 1])) = 'ADC' THEN NULL
+            WHEN NULLIF(TRIM(d.[Charge Name 1]), '') IS NULL
+                 AND CAST(ISNULL(NULLIF(TRIM(d.[Charge Code 1 Amount]), ''), '0') AS DECIMAL(18,2)) <> 0
+            THEN 'Ground Plus'
             ELSE CAST(NULLIF(TRIM(d.[Charge Name 1]), '') AS NVARCHAR(255))
         END AS shipping_method,
-        CAST(NULLIF(TRIM(d.[Charge Name 1]), '') AS NVARCHAR(255)) AS charge_name_1,
-        CAST(NULLIF(TRIM(d.[Charge Code 1]), '') AS NVARCHAR(50)) AS charge_code_1,
+        CASE
+            WHEN NULLIF(TRIM(d.[Charge Name 1]), '') IS NULL
+                 AND CAST(ISNULL(NULLIF(TRIM(d.[Charge Code 1 Amount]), ''), '0') AS DECIMAL(18,2)) <> 0
+            THEN 'Ground Plus'
+            ELSE CAST(NULLIF(TRIM(d.[Charge Name 1]), '') AS NVARCHAR(255))
+        END AS charge_name_1,
+        CASE
+            WHEN NULLIF(TRIM(d.[Charge Code 1]), '') IS NULL
+                 AND CAST(ISNULL(NULLIF(TRIM(d.[Charge Code 1 Amount]), ''), '0') AS DECIMAL(18,2)) <> 0
+            THEN 'GP'
+            ELSE CAST(NULLIF(TRIM(d.[Charge Code 1]), '') AS NVARCHAR(50))
+        END AS charge_code_1,
         CAST(ISNULL(NULLIF(TRIM(d.[Charge Code 1 Amount]), ''), '0') AS DECIMAL(18,2)) AS charge_amount_1,
         CAST(NULLIF(TRIM(d.[Charge Name 2]), '') AS NVARCHAR(255)) AS charge_name_2,
         CAST(NULLIF(TRIM(d.[Charge Code 2]), '') AS NVARCHAR(50)) AS charge_code_2,
