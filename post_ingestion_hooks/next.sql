@@ -20,7 +20,9 @@ BEGIN TRY
 
     -- Assign UPS unknowns for Logicx Crew accounts to customer_id = 1
     UPDATE ccl
-    SET    ccl.customer_id = 1
+    SET    ccl.customer_id        = 1,               -- LogixCrew
+           ccl.status             = 'matched',
+           ccl.status_updated_at  = SYSUTCDATETIME()
     FROM   dbo.carrier_cost_ledger ccl
     JOIN   billing.carrier_bill    cb ON cb.carrier_bill_id = ccl.carrier_bill_id
     JOIN   dbo.carrier             c  ON c.carrier_id       = ccl.carrier_id
