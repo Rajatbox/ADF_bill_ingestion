@@ -3,49 +3,57 @@
 Post-Ingestion Hook — Next Tenant
 ================================================================================
 Inputs:  @File_id (INT), @Carrier_id (INT)
-Outputs: Status, Message (success) | Status, ErrorNumber, ErrorMessage, ErrorLine (error)
+Outputs: Status, RecordsAssigned (success) | Status, ErrorNumber, ErrorMessage, ErrorLine (error)
 
 Purpose: Tenant-specific post-ingestion logic for Next.
-         Override dbo.usp_post_ingestion_hook on next_db with this body.
+         Run this directly on next_db to create or update the hook.
 
 Execution Order: After Load_to_gold, before Complete File Processing.
 ================================================================================
 */
 
-SET NOCOUNT ON;
+CREATE OR ALTER PROCEDURE dbo.usp_post_ingestion_hook
+    @File_id    INT,
+    @Carrier_id INT
+AS
+BEGIN
 
-DECLARE @RecordsAssigned INT;
+    SET NOCOUNT ON;
 
-BEGIN TRY
+    DECLARE @RecordsAssigned INT;
 
-    -- Assign UPS unknowns for Logicx Crew accounts to customer_id = 1
-    UPDATE ccl
-    SET    ccl.customer_id        = 1,               -- LogixCrew
-           ccl.status             = 'matched',
-           ccl.status_updated_at  = SYSUTCDATETIME()
-    FROM   dbo.carrier_cost_ledger ccl
-    JOIN   billing.carrier_bill    cb ON cb.carrier_bill_id = ccl.carrier_bill_id
-    JOIN   dbo.carrier             c  ON c.carrier_id       = ccl.carrier_id
-    WHERE  cb.file_id            = @File_id
-      AND  LOWER(c.carrier_name) = 'ups'
-      AND  cb.account_number     IN ('0000XH9591', '00000H3W29')
-      AND  ccl.status            = 'unknown';
+    BEGIN TRY
 
-    SET @RecordsAssigned = @@ROWCOUNT;
+        -- Assign UPS unknowns for Logicx Crew accounts to customer_id = 1
+        UPDATE ccl
+        SET    ccl.customer_id        = 1,               -- LogixCrew
+               ccl.status             = 'matched',
+               ccl.status_updated_at  = SYSUTCDATETIME()
+        FROM   dbo.carrier_cost_ledger ccl
+        JOIN   billing.carrier_bill    cb ON cb.carrier_bill_id = ccl.carrier_bill_id
+        JOIN   dbo.carrier             c  ON c.carrier_id       = ccl.carrier_id
+        WHERE  cb.file_id            = @File_id
+          AND  LOWER(c.carrier_name) = 'ups'
+          AND  cb.account_number     IN ('0000XH9591', '00000H3W29')
+          AND  ccl.status            = 'unknown';
 
-    SELECT
-        'SUCCESS'            AS Status,
-        @RecordsAssigned     AS RecordsAssigned;
+        SET @RecordsAssigned = @@ROWCOUNT;
 
-END TRY
-BEGIN CATCH
+        SELECT
+            'SUCCESS'        AS Status,
+            @RecordsAssigned AS RecordsAssigned;
 
-    SELECT
-        'ERROR'          AS Status,
-        ERROR_NUMBER()   AS ErrorNumber,
-        ERROR_MESSAGE()  AS ErrorMessage,
-        ERROR_LINE()     AS ErrorLine;
+    END TRY
+    BEGIN CATCH
 
-    THROW;
+        SELECT
+            'ERROR'          AS Status,
+            ERROR_NUMBER()   AS ErrorNumber,
+            ERROR_MESSAGE()  AS ErrorMessage,
+            ERROR_LINE()     AS ErrorLine;
 
-END CATCH;
+        THROW;
+
+    END CATCH;
+
+END
