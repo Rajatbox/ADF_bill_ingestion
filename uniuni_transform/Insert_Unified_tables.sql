@@ -19,7 +19,7 @@ ADF Pipeline Variables Required:
 
 Purpose: Transform carrier-specific data into unified analytical schema:
          1. Insert physical shipment attributes with unit conversions:
-            - Weight: dim_weight (LBS × 16 → OZ, OZS → OZ)
+            - Weight: billable_weight (LBS × 16 → OZ, OZS → OZ)
             - Dimensions: CM × 0.393701 → IN, IN → IN (no conversion)
          2. Unpivot 18 charge columns and insert into shipment_charges
 
@@ -80,11 +80,13 @@ BEGIN TRY
         ub.service_type AS shipping_method,
         CAST(ub.[zone] AS VARCHAR(255)) AS destination_zone,
         
-        -- Weight conversion to OZ (from dim_weight per reference stored procedure)
-        CASE 
-            WHEN UPPER(TRIM(ub.dim_weight_uom)) = 'LBS' THEN ub.dim_weight * 16.0
-            WHEN UPPER(TRIM(ub.dim_weight_uom)) = 'OZS' THEN ub.dim_weight
-            WHEN ub.dim_weight_uom IS NULL THEN NULL
+        -- Weight conversion to OZ
+        -- billable_weight is the weight UniUni charges on (max of actual vs dim).
+        -- dim_weight is the dimensional component only and is 0 when actual weight wins.
+        CASE
+            WHEN UPPER(TRIM(ub.billable_weight_uom)) = 'LBS' THEN ub.billable_weight * 16.0
+            WHEN UPPER(TRIM(ub.billable_weight_uom)) = 'OZS' THEN ub.billable_weight
+            WHEN ub.billable_weight_uom IS NULL THEN NULL
             ELSE NULL  -- Unknown unit
         END AS billed_weight_oz,
         
