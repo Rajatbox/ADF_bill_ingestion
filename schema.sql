@@ -2247,4 +2247,97 @@ ALTER COLUMN carrier_id INT NULL;
 -- One permanent row; all null-tracking charges across all carriers point to this id via FK.
 INSERT INTO billing.shipment_attributes (carrier_id, tracking_number, created_date, updated_date)
 VALUES (NULL, 'Service_charges', GETUTCDATE(), GETUTCDATE());
+
+-----------------------------------------------------------------------------------------------------------------
+-- GOFO Carrier: Staging, Normalized, and Charges View
+-- GOFO invoices per shipment only (no account-level charges) -- no Service_charges sentinel needed.
+-- Invoice number and bill date are not derived from body columns (never present in any data row,
+-- regardless of format version). Instead they're extracted from the row-1 metadata line via an ADF
+-- Lookup activity + dynamic content expressions, and passed into Insert_ELT_&_CB.sql as
+-- @Invoice_Number / @Bill_Date. See gofo_transform/Attribute_fetch.md.
+-- A-scan Date: present in the current/latest GOFO file format (used for shipment_date); absent in
+-- older-format files on hand, which are not expected going forward.
+-----------------------------------------------------------------------------------------------------------------
+
+CREATE TABLE billing.delta_gofo_bill (
+    [Customer ID]                VARCHAR(50)  NULL,
+    [Customer Name]              VARCHAR(255) NULL,
+    [Tracking Number]             VARCHAR(255) NULL,
+    [Order Number]                VARCHAR(255) NULL,
+    [A-scan Date]                 VARCHAR(50)  NULL,
+    [Delivery Date]               VARCHAR(50)  NULL,
+    [Reference1]                  VARCHAR(255) NULL,
+    [Reference2]                  VARCHAR(255) NULL,
+    [Product]                     VARCHAR(255) NULL,
+    [Prealerted Hub]              VARCHAR(50)  NULL,
+    [Injection Hub]               VARCHAR(50)  NULL,
+    [Destination State]           VARCHAR(100) NULL,
+    [Zip Code]                    VARCHAR(20)  NULL,
+    [Zone]                        VARCHAR(20)  NULL,
+    [Actual weight (lbs)]         VARCHAR(50)  NULL,
+    [Invoicing weight (lbs)]      VARCHAR(50)  NULL,
+    [Dimensions (inch)]           VARCHAR(50)  NULL,   -- "L*W*H", e.g. "8.000*4.500*4.000"
+    [Delivery Fee]                VARCHAR(50)  NULL,
+    [Overweight Fees]             VARCHAR(50)  NULL,
+    [Oversized Fees]              VARCHAR(50)  NULL,
+    [Return Fees]                 VARCHAR(50)  NULL,
+    [Remote Area Fees]            VARCHAR(50)  NULL,
+    [Fuel Surcharges]             VARCHAR(50)  NULL,
+    [Delivery Area Fees]          VARCHAR(50)  NULL,
+    [Additional Interception Fees] VARCHAR(50) NULL,
+    [Relabelling Fee]             VARCHAR(50)  NULL,
+    [Return Reship FEE]           VARCHAR(50)  NULL,
+    [Credit for Delivery Fees]    VARCHAR(50)  NULL,
+    [Credit for Order Value]      VARCHAR(50)  NULL,
+    [Other]                       VARCHAR(50)  NULL,
+    [Total]                       VARCHAR(50)  NULL,
+    [Remarks]                     VARCHAR(500) NULL
+);
+
+CREATE TABLE billing.gofo_bill (
+    id int IDENTITY(1,1) NOT NULL,
+    carrier_bill_id int NULL,
+    customer_id nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    customer_name nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    tracking_number nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    order_number nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    ascan_date date NULL,
+    delivery_date date NULL,
+    product nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,        -- blank -> 'GOFO Parcel Pickup'
+    prealerted_hub nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    injection_hub nvarchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    destination_state nvarchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    zip_code nvarchar(20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [zone] nvarchar(20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    actual_weight_lbs decimal(18,2) NULL,
+    invoicing_weight_lbs decimal(18,2) NULL,
+    dim_length_in decimal(18,2) NULL,
+    dim_width_in decimal(18,2) NULL,
+    dim_height_in decimal(18,2) NULL,
+    delivery_fee decimal(18,2) NULL,
+    overweight_fees decimal(18,2) NULL,
+    oversized_fees decimal(18,2) NULL,
+    return_fees decimal(18,2) NULL,
+    remote_area_fees decimal(18,2) NULL,
+    fuel_surcharges decimal(18,2) NULL,
+    delivery_area_fees decimal(18,2) NULL,
+    additional_interception_fees decimal(18,2) NULL,
+    relabelling_fee decimal(18,2) NULL,
+    return_reship_fee decimal(18,2) NULL,
+    credit_for_delivery_fees decimal(18,2) NULL,
+    credit_for_order_value decimal(18,2) NULL,
+    other_fee decimal(18,2) NULL,
+    total_amount decimal(18,2) NULL,
+    remarks nvarchar(500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    created_date datetime2 DEFAULT sysdatetime() NOT NULL,
+
+    CONSTRAINT PK_gofo_bill PRIMARY KEY (id),
+    CONSTRAINT FK_gofo_bill_carrier_bill FOREIGN KEY (carrier_bill_id)
+        REFERENCES billing.carrier_bill(carrier_bill_id)
+);
+
+-- No unpivot view for GOFO charges: the 13 charge columns are fixed and known at design
+-- time (unlike FedEx's genuinely dynamic/pivoted charge-to-column mapping, which is why
+-- vw_FedExCharges exists). The OUTER APPLY (VALUES ...) unpivot is inlined directly in
+-- Sync_Reference_Data.sql and Insert_Unified_tables.sql instead.
 SELECT * FROM weight_audit WHERE is_cost_exception = 1;

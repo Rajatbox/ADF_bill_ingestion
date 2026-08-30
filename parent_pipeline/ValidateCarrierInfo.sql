@@ -34,6 +34,7 @@ DECLARE @ActualAccountInFile NVARCHAR(100) = CASE
     WHEN @InputCarrier = 'shipx'      THEN JSON_VALUE(@RawJson, '$.Prop_2')   -- Column 3: Company Id
     WHEN @InputCarrier = 'veho'       THEN JSON_VALUE(@RawJson, '$.Prop_30')  -- Column 31: Account Number
     WHEN @InputCarrier = 'shippo'     THEN JSON_VALUE(@RawJson, '$.Prop_17')  -- Column 18: rate_carrier_account
+    WHEN @InputCarrier = 'gofo'       THEN JSON_VALUE(@RawJson, '$.Prop_0')   -- Column 1: Customer ID
     ELSE 'UNKNOWN_CARRIER'
 END;
 
