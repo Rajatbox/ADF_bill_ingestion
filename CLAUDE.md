@@ -1,5 +1,20 @@
 # ADF Bill Ingestion — Codebase Instructions
 
+## New carrier onboarding — strict 3-stage order
+
+When onboarding a new carrier, run these stages **in order** and do not skip or reorder them:
+
+1. **Setup agent** (`.cursor/agents/setup_agent.md`) — triggered first, on "I want to integrate [Carrier]".
+   Creates the `{carrier}_transform/` folder with 6 empty files (`{carrier}_example_bill.csv`, `reference_stored_procedure.sql`, `additional_reference.md`, `Insert_ELT_&_CB.sql`, `Sync_Reference_Data.sql`, `Insert_Unified_tables.sql`), then **stops and waits** for the user to supply the CSV and stored procedure. Do not generate any scripts at this stage.
+
+2. **Design agent** (`.cursor/agents/design_agent.md`) — triggered only after the user has provided the CSV + stored procedure (+ optional additional reference) and confirmed requirements.
+   Reads the inputs, applies `.cursor/rules/design-constraints.mdc`, presents an implementation plan and clarifying questions, and **stops and waits for user approval** before generating the 3 transform scripts, a validation test query, and carrier docs under `docs/carriers/`.
+
+3. **add-carrier** (Claude Code skill) — triggered last, only once the design agent's 3 SQL scripts exist and are approved.
+   Wires the finished carrier into the ADF pipeline JSON layer (`adf/pipeline/<Carrier>_Transform.json`, `Parent_bill_Ingestor.json`). This lives in a separate ADF Git-integration repo, not in `ADF_bill_ingestion` — confirm/obtain that repo path before running this stage if it hasn't been established yet.
+
+Never jump straight to add-carrier for a brand-new carrier — it assumes the design stage is already done.
+
 ## Repo structure
 
 Each `{carrier}_transform/` folder contains two key scripts:
