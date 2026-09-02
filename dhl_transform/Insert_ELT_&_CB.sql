@@ -37,7 +37,8 @@ Bronze-to-Silver Mapping (this script):
 
 Tracking Number Logic (applied in Step 2):
   - international_tracking_number: customer_confirm (Col 12) saved as-is
-  - domestic_tracking_number:      '420' + LEFT(zip, 5) + delivery_confirm (Col 13)
+  - domestic_tracking_number:      delivery_confirm (Col 13) starts with '9' -> '420' + LEFT(zip, 5) + delivery_confirm
+                                    otherwise (e.g. non-shipment reference like FLC... fee lines) -> delivery_confirm as-is
   - overlabel_tracking_number:     '420' + LEFT(zip, 5) + overlabeled_value (Col 67)
 
 Carrier Bill Total: SUM of all 38 charge columns from delta.
@@ -223,8 +224,12 @@ BEGIN TRY
         CAST(NULLIF(TRIM(d.invoice_date), '') AS date) AS invoice_date,
         CAST(NULLIF(TRIM(d.pickup_date), '') AS date) AS shipping_date,
         TRIM(CAST(d.customer_confirm AS nvarchar(255))),
-        '420' + RIGHT('0' + LEFT(REPLACE(CAST(d.recipient_zip AS varchar(50)), ' ', ''), 5), 5)
-             + TRIM(CAST(d.delivery_confirm AS varchar(255))) AS domestic_tracking_number,
+        CASE
+            WHEN LEFT(TRIM(CAST(d.delivery_confirm AS varchar(255))), 1) = '9'
+                THEN '420' + RIGHT('0' + LEFT(REPLACE(CAST(d.recipient_zip AS varchar(50)), ' ', ''), 5), 5)
+                           + TRIM(CAST(d.delivery_confirm AS varchar(255)))
+            ELSE TRIM(CAST(d.delivery_confirm AS varchar(255)))
+        END AS domestic_tracking_number,
         CAST(d.recipient_zip AS nvarchar(255)),
         CAST(d.recipient_country AS nvarchar(10)),
         CAST(d.material_or_vas_desc AS nvarchar(350)),

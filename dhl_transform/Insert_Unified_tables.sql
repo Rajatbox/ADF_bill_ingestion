@@ -23,8 +23,8 @@ Purpose: Two-part idempotent population script (no MPS logic needed for DHL):
 
          Tracking Number Resolution (overlabel-preferred, then Column 20 fallback):
          - overlabel_tracking_number is non-empty → use overlabel_tracking_number
-         - recipient_country = 'US' → use domestic_tracking_number
-         - recipient_country != 'US' → use international_tracking_number
+         - recipient_country = 'US' or blank/NULL → use domestic_tracking_number
+         - recipient_country is a non-US value → use international_tracking_number
 
 Sources:  billing.dhl_bill + carrier_bill JOIN (file_id filtered)
 Targets:  billing.shipment_attributes (business key: carrier_id + tracking_number)
@@ -58,8 +58,8 @@ BEGIN TRY
     
     Tracking number resolution (overlabel-preferred, then Column 20 fallback):
       - overlabel_tracking_number is non-empty → overlabel_tracking_number
-      - recipient_country = 'US' → domestic_tracking_number
-      - recipient_country != 'US' → international_tracking_number
+      - recipient_country = 'US' or blank/NULL → domestic_tracking_number
+      - recipient_country is a non-US value → international_tracking_number
     
     Weight conversion: billed_weight → ounces (OZ)
     ================================================================================
@@ -92,10 +92,11 @@ BEGIN TRY
     JOIN billing.carrier_bill cb ON cb.carrier_bill_id = dhl.carrier_bill_id
     CROSS APPLY (
         VALUES (
-            CASE 
+            CASE
                 WHEN NULLIF(TRIM(dhl.overlabel_tracking_number), '') IS NOT NULL
                     THEN dhl.overlabel_tracking_number
-                WHEN UPPER(TRIM(dhl.recipient_country)) = 'US'
+                WHEN NULLIF(TRIM(dhl.recipient_country), '') IS NULL
+                    OR UPPER(TRIM(dhl.recipient_country)) = 'US'
                     THEN dhl.domestic_tracking_number
                 ELSE dhl.international_tracking_number
             END

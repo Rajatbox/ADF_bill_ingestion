@@ -13,7 +13,7 @@
 ## Tracking Number Logic
 
 - **International**: Column 12 (`customer_confirm`) used as-is
-- **Domestic**: `'420' + LEFT(zip, 5) + Column 13 (delivery_confirm)`
+- **Domestic**: if Column 13 (`delivery_confirm`) starts with `9` → `'420' + LEFT(zip, 5) + Column 13`; otherwise Column 13 is kept as-is (covers non-shipment reference values like `FLC...` API fee line IDs)
 - **Overlabel**: `'420' + LEFT(zip, 5) + Column 67 (overlabeled_value)` — alternate tracking used by WMS for last-mile
 - **Resolution**: overlabel wins when present; else `recipient_country = 'US'` → domestic; otherwise → international
 

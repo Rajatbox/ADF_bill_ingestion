@@ -2099,8 +2099,10 @@ AS
 SELECT
     dhl.carrier_bill_id,
     dhl.invoice_number,
-    CASE 
-        WHEN UPPER(TRIM(dhl.recipient_country)) = 'US' THEN dhl.domestic_tracking_number
+    CASE
+        WHEN NULLIF(TRIM(dhl.recipient_country), '') IS NULL
+            OR UPPER(TRIM(dhl.recipient_country)) = 'US'
+            THEN dhl.domestic_tracking_number
         ELSE dhl.international_tracking_number
     END AS tracking_number,
     dhl.created_date,

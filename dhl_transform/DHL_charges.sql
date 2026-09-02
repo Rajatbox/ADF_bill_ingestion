@@ -22,10 +22,11 @@ AS
 SELECT
     dhl.carrier_bill_id,
     dhl.invoice_number,
-    CASE 
+    CASE
         WHEN NULLIF(TRIM(dhl.overlabel_tracking_number), '') IS NOT NULL
             THEN dhl.overlabel_tracking_number
-        WHEN UPPER(TRIM(dhl.recipient_country)) = 'US'
+        WHEN NULLIF(TRIM(dhl.recipient_country), '') IS NULL
+            OR UPPER(TRIM(dhl.recipient_country)) = 'US'
             THEN dhl.domestic_tracking_number
         ELSE dhl.international_tracking_number
     END AS tracking_number,
