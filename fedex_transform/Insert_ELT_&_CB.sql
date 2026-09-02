@@ -132,6 +132,8 @@ billing.delta_fedex_bill AS d
         dim_height,
         dim_unit,
         shipper_zip_code,
+        shipper_company,
+        shipper_name,
         [Transportation Charge Amount],
     [Tracking ID Charge Description],
     [Tracking ID Charge Amount],
@@ -235,7 +237,8 @@ billing.delta_fedex_bill AS d
     [Tracking ID Charge Amount_49],
     [Tracking ID Charge Description_50],
     [Tracking ID Charge Amount_50],
-    original_customer_reference
+    original_customer_reference,
+    original_ref2
 )
 SELECT 
     cb.carrier_bill_id,
@@ -254,6 +257,8 @@ SELECT
     CAST(NULLIF(TRIM(d.[Dim Height]), '') AS DECIMAL(18,2)) AS dim_height,
     NULLIF(TRIM(d.[Dim Unit]), '') AS dim_unit,
     NULLIF(TRIM(d.[Shipper Zip Code]), '') AS shipper_zip_code,
+    NULLIF(TRIM(d.[Shipper Company]), '') AS shipper_company,
+    NULLIF(TRIM(d.[Shipper Name]), '') AS shipper_name,
     CAST(NULLIF(REPLACE(TRIM(d.[Transportation Charge Amount]), ',', ''), '') AS DECIMAL(18,2)) AS [Transportation Charge Amount],
     NULLIF(TRIM(d.[Tracking ID Charge Description]), '') AS [Tracking ID Charge Description],
     CAST(NULLIF(REPLACE(TRIM(d.[Tracking ID Charge Amount]), ',', ''), '') AS DECIMAL(18,2)) AS [Tracking ID Charge Amount],
@@ -357,7 +362,8 @@ SELECT
     CAST(NULLIF(REPLACE(TRIM(d.[Tracking ID Charge Amount_49]), ',', ''), '') AS DECIMAL(18,2)) AS [Tracking ID Charge Amount_49],
     NULLIF(TRIM(d.[Tracking ID Charge Description_50]), '') AS [Tracking ID Charge Description_50],
     CAST(NULLIF(REPLACE(TRIM(d.[Tracking ID Charge Amount_50]), ',', ''), '') AS DECIMAL(18,2)) AS [Tracking ID Charge Amount_50],
-    CAST(NULLIF(TRIM(d.[Original Customer Reference]), '') AS NVARCHAR(255)) AS original_customer_reference
+    CAST(NULLIF(TRIM(d.[Original Customer Reference]), '') AS NVARCHAR(255)) AS original_customer_reference,
+    CAST(NULLIF(TRIM(d.[Original Ref#2]), '') AS NVARCHAR(255)) AS original_ref2
 FROM billing.delta_fedex_bill d
 INNER JOIN billing.carrier_bill cb
     ON cb.bill_number = NULLIF(TRIM(d.[Invoice Number]), '')

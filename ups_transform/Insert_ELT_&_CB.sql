@@ -130,6 +130,8 @@ BEGIN TRY
         dim_height,
         dim_unit,
         sender_postal,
+        shipment_reference_1,
+        shipment_reference_2,
         created_date
     )
     SELECT
@@ -152,6 +154,8 @@ BEGIN TRY
         dims.dim_height,
         NULLIF(TRIM(d.[Package Dimension Unit Of Measure]), ''),
         NULLIF(TRIM(d.[Sender Postal]), ''),
+        NULLIF(TRIM(d.[Shipment Reference Number 1]), ''),
+        NULLIF(TRIM(d.[Shipment Reference Number 2]), ''),
         SYSDATETIME()
     FROM
         billing.delta_ups_bill AS d

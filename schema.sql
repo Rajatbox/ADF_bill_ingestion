@@ -973,6 +973,9 @@ CREATE TABLE billing.fedex_bill (
 	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
 	carrier_bill_id int NULL,
 	shipper_zip_code nvarchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	shipper_company nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	shipper_name nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	original_ref2 nvarchar(255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Transportation Charge Amount] decimal(18,2) NULL,
 	[Tracking ID Charge Description] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Tracking ID Charge Amount] decimal(18,2) NULL,
@@ -1142,7 +1145,9 @@ CREATE TABLE billing.ups_bill (
 	created_date datetime2 DEFAULT sysdatetime() NOT NULL,
 	carrier_bill_id int NULL,
 	sender_postal nvarchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	
+	shipment_reference_1 nvarchar(500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	shipment_reference_2 nvarchar(500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+
 	CONSTRAINT PK_ups_carrier_bill_id PRIMARY KEY (id),
 	CONSTRAINT FK_ups_bill_carrier_bill FOREIGN KEY (carrier_bill_id) 
 		REFERENCES billing.carrier_bill(carrier_bill_id)
